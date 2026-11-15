@@ -3489,6 +3489,30 @@ class TreeFixer(
      * implementation of the firmware's own is served; a file that is there and was not put by this function is the firmware's and
      * stops the install. Returns true when the set is in place (now or from an earlier start).
      */
+    /**
+     * Added for AEmulator Plus (2026-11-15). Takes back the files [installAudio32Hal] put into the tree on an earlier start, once
+     * the engine's 64-bit 4.0 audio host is the audio HAL of the tree (the 32-bit 2.0 set would only shadow the board's own names).
+     * Only the files the marker names are removed, and only if they are still the engine's.
+     */
+    private fun removeAudio32Hal() {
+        runCatching {
+            val marker = File(root, "system/.aemu-parked/audio32-installed")
+            if (!marker.isFile) return
+            val dirs = mapOf(
+                "android.hardware.audio@2.0-impl.so" to "vendor/lib/hw", "android.hardware.audio.effect@2.0-impl.so" to "vendor/lib/hw",
+                "audio.primary.default.so" to "vendor/lib/hw", "android.hardware.audio.common@2.0-util.so" to "vendor/lib",
+            )
+            var n = 0
+            for (name in marker.readLines()) {
+                val dir = dirs[name] ?: continue
+                val f = File(root, "$dir/$name")
+                if (f.isFile && !isLink(f) && sameContent("engines/common/audio32/$name", f) && f.delete()) n++
+            }
+            marker.delete()
+            if (n > 0) log("audio: the engine's 32-bit audio HAL 2.0 is taken out again ($n files), the engine's 64-bit 4.0 host serves")
+        }
+    }
+
     private fun installAudio32Hal(boardAudio: List<File>): Boolean {
         if (isPure32Tree(root) || img.arch.foreign) return false
         fun is32BitElf(f: File) = runCatching {
@@ -3551,7 +3575,17 @@ class TreeFixer(
         if (boardAudio.isEmpty()) return
         // Added for AEmulator Plus (2026-11-14): a 32-bit board service with no 32-bit implementation left gets the engine's 32-bit
         // 2.0 audio HAL (engines/common/audio32) and keeps serving; the engine's 64-bit host is set aside as for any firmware with its own service
-        val ownAudio32 = installAudio32Hal(boardAudio)
+        // Modified for AEmulator Plus (2026-11-15): the 32-bit 2.0 set only serves a framework whose libaudiohal still asks for audio 2.0
+        // (Android 11 and older). A firmware of 12+ asks for 7.1, 7.0, 6.0, 5.0, 4.0 (HyperOS 1.0 / Android 14, Xiaomi irqtpe:
+        // "Could not get passthrough implementation for android.hardware.audio@4.0::IDevicesFactory/default", "Could not register Audio
+        // Core API", exit 134, 12 restarts, AudioFlinger waits for IDevicesFactory 4.0 for ever, system_server stalls in StartAudioService),
+        // so a 2.0 HAL is of no use to it, and with the set in place the engine's 64-bit host below (which registers 4.0 and 2.0) was
+        // set aside as the "firmware with its own audio service". When the engine's 64-bit 4.0 route is there it is the one taken.
+        val engine4Route = File(root, "vendor/lib64/hw/android.hardware.audio@4.0-impl.so").isFile &&
+            hwPrograms("android.hardware.audio@2.0-service").any { f ->
+                !isLink(f) && !runCatching { f.inputStream().use { i -> val h = ByteArray(5); i.read(h) == 5 && h[4] == 1.toByte() } }.getOrDefault(false)
+            }
+        val ownAudio32 = if (engine4Route) { removeAudio32Hal(); false } else installAudio32Hal(boardAudio)
         // Added for AEmulator Plus (2026-11-02). A board of 8 - 11 (Qualcomm) has a 32-bit audio service whose HAL implementation is
         // 32-bit too. The engine's manifest declares audio@4.0 and the engine's 4.0 implementation is 64-bit only, so the board's
         // service finds no implementation it can load ("Could not get passthrough implementation for
