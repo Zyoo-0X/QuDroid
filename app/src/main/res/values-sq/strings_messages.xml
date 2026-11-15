@@ -232,4 +232,7 @@
     <string name="imp_choice_text">Ky paketë ka më shumë se një %1$s (%2$d nga %3$d). Zgjidh atë që do të importohet.</string>
     <string name="imp_choice_ok">Importo</string>
     <string name="imp_choice_cancel">Anulo importimin</string>
+    <string name="ota_squash_files_modified">%1$d skedarë të /system u ndryshuan nga aplikacioni ose nga ti dhe nuk mund të rindërtohen, p.sh. %2$s. Një imazh sistemi SquashFS mund të rindërtohet vetëm nga skedarë të pandryshuar. Asgjë nuk u ndryshua.</string>
+    <string name="imp_unreadable_mbr">%1$s: tabelë ndarjesh MBR e palexueshme</string>
+    <string name="imp_no_system_partition_in_mbr">%1$s: nuk ka ndarje sistemi në MBR</string>
 </resources>

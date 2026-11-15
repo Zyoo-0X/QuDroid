@@ -232,4 +232,7 @@
     <string name="imp_choice_text">Bu paket birden fazla %1$s içeriyor (%2$d / %3$d). İçe aktarılacak olanı seçin.</string>
     <string name="imp_choice_ok">İçe aktar</string>
     <string name="imp_choice_cancel">İçe aktarmayı iptal et</string>
+    <string name="ota_squash_files_modified">/system içindeki %1$d dosya uygulama veya sizin tarafınızdan değiştirildi ve yeniden oluşturulamaz, ör. %2$s. SquashFS sistem imajı yalnızca değiştirilmemiş dosyalardan yeniden oluşturulabilir. Hiçbir şey değiştirilmedi.</string>
+    <string name="imp_unreadable_mbr">%1$s: okunamayan MBR bölüm tablosu</string>
+    <string name="imp_no_system_partition_in_mbr">%1$s: MBR’de sistem bölümü yok</string>
 </resources>

@@ -526,4 +526,12 @@
     <string name="phantom_open_dev">Άνοιγμα Επιλογών για προγραμματιστές</string>
     <string name="phantom_ignore">Παράβλεψη</string>
     <string name="phantom_never">Να μην γίνει ξανά υπενθύμιση</string>
+    <string name="vs_netdebug">Αποσφαλματωτής HTTP</string>
+    <string name="vs_netdebug_sub">Καταγράφει τα αιτήματα HTTP και HTTPS του επισκέπτη και μπορεί να τα απαντά ή να τα αλλάζει (μενού › Αποσφαλματωτής HTTP). Τοποθετεί μια αρχή πιστοποίησης αποσφαλμάτωσης στο χώρο αξιόπιστων πιστοποιητικών του επισκέπτη. Εφαρμόζεται στην επόμενη πλήρη εκκίνηση.</string>
+    <string name="m_netdebug">Αποσφαλματωτής HTTP</string>
+    <string name="vs_skip_perm_wait">Παράλειψη αναμονής ελεγκτή αδειών (Android 10-13)</string>
+    <string name="vs_skip_perm_wait_sub">Για υλικολογισμικό x86 σε τηλέφωνο ARM, όπου η εφαρμογή ελεγκτή αδειών είναι πολύ αργή για να απαντήσει εντός 60 s και το system_server τερματίζεται («Error granting/upgrading runtime permissions»). Τροποποιεί το services.jar του υλικολογισμικού ώστε η εκκίνηση να μην περιμένει τις προεπιλεγμένες άδειες χρόνου εκτέλεσης· οι προεγκατεστημένες εφαρμογές δεν λαμβάνουν τότε αυτές τις άδειες κατά την εκκίνηση. Το dex2oat εμποδίζεται να ξαναμεταγλωττίσει το τροποποιημένο jar. Η απενεργοποίηση επαναφέρει το αρχικό jar. Ισχύει από την επόμενη πλήρη εκκίνηση.</string>
+    <string name="catalog_download_checking">Έλεγχος συνδέσμου…</string>
+    <string name="catalog_download_title">Λήψη ROM</string>
+    <string name="catalog_download_failed">Η λήψη απέτυχε: %1$s</string>
 </resources>

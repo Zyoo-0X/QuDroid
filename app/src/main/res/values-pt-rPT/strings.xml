@@ -528,4 +528,12 @@
     <string name="phantom_open_dev">Abrir Opções do programador</string>
     <string name="phantom_ignore">Ignorar</string>
     <string name="phantom_never">Não lembrar novamente</string>
+    <string name="vs_netdebug">Depurador HTTP</string>
+    <string name="vs_netdebug_sub">Regista os pedidos HTTP e HTTPS do convidado e pode respondê-los ou alterá-los (menu › Depurador HTTP). Coloca uma CA de depuração no repositório de confiança do convidado. Aplica-se no próximo arranque completo.</string>
+    <string name="m_netdebug">Depurador HTTP</string>
+    <string name="vs_skip_perm_wait">Ignorar a espera do controlador de autorizações (Android 10-13)</string>
+    <string name="vs_skip_perm_wait_sub">Para firmware x86 num telemóvel ARM, em que a app do controlador de autorizações é demasiado lenta para responder em 60 s e o system_server é terminado (\"Error granting/upgrading runtime permissions\"). Modifica o services.jar do firmware para que o arranque não espere pelas autorizações de execução predefinidas; as apps pré-instaladas não recebem então essas autorizações no arranque. O dex2oat fica impedido de recompilar o jar modificado. Desativar restaura o jar original. Aplica-se no próximo arranque completo.</string>
+    <string name="catalog_download_checking">A verificar a ligação…</string>
+    <string name="catalog_download_title">A transferir a ROM</string>
+    <string name="catalog_download_failed">Falha na transferência: %1$s</string>
 </resources>

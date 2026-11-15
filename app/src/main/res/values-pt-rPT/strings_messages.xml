@@ -232,4 +232,7 @@
     <string name="imp_choice_text">Este pacote tem mais do que um %1$s (%2$d de %3$d). Escolha o que pretende importar.</string>
     <string name="imp_choice_ok">Importar</string>
     <string name="imp_choice_cancel">Cancelar importação</string>
+    <string name="ota_squash_files_modified">%1$d ficheiros de /system foram alterados pela app ou por si e não podem ser reconstruídos, p. ex. %2$s. Uma imagem de sistema SquashFS só pode ser reconstruída a partir de ficheiros não modificados. Nada foi alterado.</string>
+    <string name="imp_unreadable_mbr">%1$s: tabela de partições MBR ilegível</string>
+    <string name="imp_no_system_partition_in_mbr">%1$s: nenhuma partição de sistema no MBR</string>
 </resources>

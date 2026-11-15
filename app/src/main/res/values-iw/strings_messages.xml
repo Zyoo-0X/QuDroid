@@ -232,4 +232,7 @@
     <string name="imp_choice_text">בחבילה הזו יש יותר מפריט אחד מסוג %1$s‏ (%2$d מתוך %3$d). בחר את הפריט לייבוא.</string>
     <string name="imp_choice_ok">ייבוא</string>
     <string name="imp_choice_cancel">ביטול הייבוא</string>
+    <string name="ota_squash_files_modified">%1$d קבצים ב-/system שונו על ידי האפליקציה או על ידך ולא ניתן לבנות אותם מחדש, למשל %2$s. ניתן לבנות מחדש תמונת מערכת SquashFS רק מקבצים שלא שונו. דבר לא שונה.</string>
+    <string name="imp_unreadable_mbr">%1$s: טבלת מחיצות MBR שאינה קריאה</string>
+    <string name="imp_no_system_partition_in_mbr">%1$s: אין מחיצת מערכת ב-MBR</string>
 </resources>

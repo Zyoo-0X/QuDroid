@@ -108,6 +108,7 @@
     <string name="ota_updates_but_system">this OTA updates %1$s, but this system is %2$s</string>
     <string name="ota_updated_image_contents_differ">the updated system image does not have the contents this OTA promises (blocks %1$s). Nothing was changed.</string>
     <string name="ota_image_blocks_differ">the system image of this VM is not the one this OTA was made for (blocks %1$s differ). Nothing was changed.</string>
+    <string name="ota_squash_files_modified">%1$d files of /system were changed by the app or by you and cannot be rebuilt, e.g. %2$s. A SquashFS system image can only be rebuilt from unmodified files. Nothing was changed.</string>
     <string name="ota_image_differs_modified">the system image of this VM is not the one this OTA was made for. %1$d files of /system were changed by the app or by you and cannot be rebuilt, e.g. %2$s; the OTA reads them. Nothing was changed.</string>
     <string name="ota_image_differs_recover">the system image of this VM is not the one this OTA was made for (%1$s). The OTA would try to recover it, which a VM cannot do, and stop with \"%2$s\". Nothing was changed.</string>
     <string name="ota_image_differs_recover_modified">the system image of this VM is not the one this OTA was made for (%1$s). The OTA would try to recover it, which a VM cannot do, and stop with \"%2$s\". %3$d files of /system were changed by the app or by you and cannot be rebuilt, e.g. %4$s; the OTA reads them. Nothing was changed.</string>
@@ -155,6 +156,8 @@
     <string name="imp_has_no_system_partition_customization_only">\"%1$s\" has no system partition (customization-only package?); import UPDATE.APP instead</string>
     <string name="imp_transfer_list_missing">%1$s.transfer.list missing</string>
     <string name="imp_unreadable_gpt">%1$s: unreadable GPT</string>
+    <string name="imp_unreadable_mbr">%1$s: unreadable MBR partition table</string>
+    <string name="imp_no_system_partition_in_mbr">%1$s: no system partition in MBR</string>
     <string name="imp_no_boot_recovery_system_partition_in">%1$s: no boot/recovery/system partition in GPT</string>
     <string name="imp_not_enough_space_to_unpack_firmware">Not enough space to unpack firmware</string>
     <string name="imp_nested_archive_depth_exceeded">nested archive depth exceeded</string>

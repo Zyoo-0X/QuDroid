@@ -302,7 +302,10 @@ class ErofsReader(private val src: RandomSource, private val checkCancelled: () 
             override fun read(b: ByteArray, off: Int, len: Int): Int {
                 while (at >= buf.size) {
                     if (next >= extents.size) return -1
-                    buf = extent(extents[next++], algo, interlaced); at = 0
+                    // drop the previous extent before decoding the next: a 256 MB extent held next to its successor was a 512 MB peak
+                    val ext = extents[next++]
+                    buf = ByteArray(0); at = 0
+                    buf = extent(ext, algo, interlaced)
                 }
                 val n = minOf(len, buf.size - at)
                 System.arraycopy(buf, at, b, off, n)

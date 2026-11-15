@@ -232,4 +232,7 @@
     <string name="imp_choice_text">Ez a csomag több %1$s elemet tartalmaz (%2$d / %3$d). Válaszd ki az importálandót.</string>
     <string name="imp_choice_ok">Importálás</string>
     <string name="imp_choice_cancel">Importálás megszakítása</string>
+    <string name="ota_squash_files_modified">A /system %1$d fájlját az alkalmazás vagy te módosítottad, ezért nem építhetők újra, pl. %2$s. Az SquashFS rendszerkép csak módosítatlan fájlokból építhető újra. Semmi sem változott.</string>
+    <string name="imp_unreadable_mbr">%1$s: olvashatatlan MBR-partíciós tábla</string>
+    <string name="imp_no_system_partition_in_mbr">%1$s: nincs rendszerpartíció az MBR-ben</string>
 </resources>

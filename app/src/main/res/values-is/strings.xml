@@ -524,4 +524,12 @@
     <string name="phantom_open_dev">Opna þróunarvalkosti</string>
     <string name="phantom_ignore">Hunsa</string>
     <string name="phantom_never">Ekki minna mig aftur á</string>
+    <string name="vs_netdebug">HTTP-aflúsari</string>
+    <string name="vs_netdebug_sub">Skráir HTTP- og HTTPS-beiðnir gestsins og getur svarað þeim eða breytt þeim (valmynd › HTTP-aflúsari). Setur aflúsunar-CA í traustgeymslu gestsins. Tekur gildi við næstu fullu ræsingu.</string>
+    <string name="m_netdebug">HTTP-aflúsari</string>
+    <string name="vs_skip_perm_wait">Sleppa bið eftir heimildastýringu (Android 10–13)</string>
+    <string name="vs_skip_perm_wait_sub">Fyrir x86-fastbúnað í ARM-síma, þar sem forrit heimildastýringarinnar er of hægt til að svara innan 60 sekúndna og system_server er stöðvaður („Error granting/upgrading runtime permissions“). Lagfærir services.jar í fastbúnaðinum svo að ræsingin bíði ekki eftir sjálfgefnum keyrslutímaheimildum; forsett forrit fá þá ekki þær heimildir við ræsingu. dex2oat er hindrað í að þýða lagfærða jar-skrá aftur. Ef slökkt er á þessu er upprunalega jar-skráin endurheimt. Tekur gildi við næstu fullu ræsingu.</string>
+    <string name="catalog_download_checking">Athuga tengil…</string>
+    <string name="catalog_download_title">Sæki ROM</string>
+    <string name="catalog_download_failed">Niðurhal mistókst: %1$s</string>
 </resources>

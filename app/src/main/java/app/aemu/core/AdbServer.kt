@@ -19,6 +19,7 @@ import kotlin.concurrent.thread
  * ADB over the network for a running VM: `adb connect <phone-ip>:5555` from a PC on the same LAN.
  * The firmware's own adbd needs USB gadget nodes and root drops, so the host speaks the ADB wire protocol itself
  * and serves shell/exec (guest sh under qemu), sync (push/pull straight on the image's files), reboot, root, remount.
+ * Modified for AEmulator Plus (2026-11-15): streams are served from the moment the guest's adbd has initialized (GuestVm.adbdUp), not only after the boot has finished.
  * No shell_v2 / stat_v2 features are announced, so any adb client falls back to the legacy services
  * (install = push to /data/local/tmp + pm install).
  */
@@ -105,6 +106,12 @@ class AdbServer(private val vm: GuestVm) {
         }
 
         private fun open(remote: Int, service: String) {
+            // the guest's adbd has not initialized (or the machine is stopping): refuse the stream, as an adbd that is not there yet would
+            if (!vm.adbAvailable) {
+                vm.log("adb: $service refused, the guest's adbd is not up")
+                send(CLSE, 0, remote)
+                return
+            }
             val s = Stream(this, nextId++, remote)
             streams[s.local] = s
             send(OKAY, s.local, remote)

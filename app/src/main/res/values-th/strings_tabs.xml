@@ -8,4 +8,12 @@
     <string name="tab_minimize">ย่อ</string>
     <string name="tab_shutdown">ปิดเครื่อง</string>
     <string name="vm_slots_full">ช่องเครื่องทั้ง %1$d ช่องถูกใช้งานอยู่ โปรดปิดเครื่องหนึ่งเครื่องก่อน</string>
+    <string name="tab_group_title">2 แท็บ</string>
+    <string name="tab_split_failed">เพิ่มเครื่องนั้นลงในแท็บนี้ไม่ได้อีกต่อไป</string>
+    <string name="tab_drag_label">ลากไปที่หน้าจอเพื่อแยก</string>
+    <string name="tab_split_title">แยก 2 แท็บ?</string>
+    <string name="tab_split_text">แต่ละเครื่องจะกลับไปอยู่ในแท็บของตัวเอง ทั้งสองเครื่องยังทำงานต่อ</string>
+    <string name="tab_split_action">แยก</string>
+    <string name="tab_bar_hide">ซ่อนแถบแท็บ</string>
+    <string name="tab_bar_show">แสดงแถบแท็บ</string>
 </resources>

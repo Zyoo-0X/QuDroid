@@ -33,3 +33,11 @@ qemu-arm ./vibration-smoke
     -nostdlib -static -ffreestanding -fno-builtin -fno-stack-protector \
     -Wl,-e,_start -o "$TEST_DIR/property-smoke" "$TEST_SRC/property-smoke.c"
 qemu-arm ./property-smoke
+"$BIN/clang" --target=armv7a-linux-androideabi21 -march=armv7-a -mthumb -Os \
+    -nostdlib -static -ffreestanding -fno-builtin -fno-stack-protector \
+    -Wl,-e,_start -o "$TEST_DIR/adss-smoke" "$TEST_SRC/adss-smoke.c"
+qemu-arm ./adss-smoke
+"$BIN/clang" --target=armv7a-linux-androideabi21 -march=armv7-a -mthumb -Os \
+    -nostdlib -static -ffreestanding -fno-builtin -fno-stack-protector \
+    -Wl,-e,_start -o "$TEST_DIR/adss-host-smoke" "$TEST_SRC/adss-host-smoke.c"
+qemu-arm ./adss-host-smoke

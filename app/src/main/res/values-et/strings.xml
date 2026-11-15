@@ -525,4 +525,12 @@
     <string name="phantom_open_dev">Ava arendaja valikud</string>
     <string name="phantom_ignore">Ignoreeri</string>
     <string name="phantom_never">Ära enam meenuta</string>
+    <string name="vs_netdebug">HTTP-silur</string>
+    <string name="vs_netdebug_sub">Logib külalise HTTP- ja HTTPS-päringud ning saab neile vastata või neid muuta (menüü › HTTP-silur). Paneb silumis-CA külalise usaldushoidlasse. Rakendub järgmisel täielikul käivitusel.</string>
+    <string name="m_netdebug">HTTP-silur</string>
+    <string name="vs_skip_perm_wait">Jäta lubade kontrolleri ootamine vahele (Android 10–13)</string>
+    <string name="vs_skip_perm_wait_sub">x86 püsivara jaoks ARM-telefonis, kus lubade kontrolleri rakendus on liiga aeglane, et 60 s jooksul vastata, ja system_server lõpetatakse („Error granting/upgrading runtime permissions”). Paigab püsivara services.jar-i nii, et käivitus ei ootaks vaikimisi käitusaegseid lube; eelinstallitud rakendused ei saa neid lube siis käivitusel. dex2oat-i takistatakse paigatud jar-i uuesti kompileerimast. Väljalülitamine taastab algse jar-i. Rakendub järgmisel täielikul käivitusel.</string>
+    <string name="catalog_download_checking">Lingi kontrollimine…</string>
+    <string name="catalog_download_title">ROM-i allalaadimine</string>
+    <string name="catalog_download_failed">Allalaadimine ebaõnnestus: %1$s</string>
 </resources>

@@ -14,4 +14,6 @@
     <string name="tab_split_title">Split 2 tabs?</string>
     <string name="tab_split_text">Each machine goes back to a tab of its own. Both keep running.</string>
     <string name="tab_split_action">Split</string>
+    <string name="tab_bar_hide">Hide tab bar</string>
+    <string name="tab_bar_show">Show tab bar</string>
 </resources>

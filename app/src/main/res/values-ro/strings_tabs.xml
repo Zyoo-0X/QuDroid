@@ -8,4 +8,12 @@
     <string name="tab_minimize">Minimizează</string>
     <string name="tab_shutdown">Oprește</string>
     <string name="vm_slots_full">Toate cele %1$d sloturi pentru mașini sunt ocupate. Oprește mai întâi una.</string>
+    <string name="tab_group_title">2 file</string>
+    <string name="tab_split_failed">Această mașină nu mai poate fi adăugată la această filă.</string>
+    <string name="tab_drag_label">Trage pe ecran pentru a împărți</string>
+    <string name="tab_split_title">Separi cele 2 file?</string>
+    <string name="tab_split_text">Fiecare mașină revine la o filă proprie. Ambele rămân în funcțiune.</string>
+    <string name="tab_split_action">Separă</string>
+    <string name="tab_bar_hide">Ascunde bara de file</string>
+    <string name="tab_bar_show">Afișează bara de file</string>
 </resources>

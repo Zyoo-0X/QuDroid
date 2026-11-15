@@ -526,4 +526,12 @@
     <string name="phantom_open_dev">Отваряне на Опции за програмисти</string>
     <string name="phantom_ignore">Игнориране</string>
     <string name="phantom_never">Повече да не се напомня</string>
+    <string name="vs_netdebug">HTTP дебъгер</string>
+    <string name="vs_netdebug_sub">Записва HTTP и HTTPS заявките на госта и може да им отговаря или да ги променя (меню › HTTP дебъгер). Добавя дебъг сертифициращ орган в хранилището за доверие на госта. Прилага се при следващото пълно стартиране.</string>
+    <string name="m_netdebug">HTTP дебъгер</string>
+    <string name="vs_skip_perm_wait">Пропускане на чакането на контролера на разрешенията (Android 10–13)</string>
+    <string name="vs_skip_perm_wait_sub">За x86 фърмуер на ARM телефон, където приложението на контролера на разрешенията е твърде бавно, за да отговори до 60 s, и system_server се прекратява („Error granting/upgrading runtime permissions“). Променя services.jar на фърмуера, така че стартирането да не чака стандартните разрешения по време на изпълнение; предварително инсталираните приложения тогава не получават тези разрешения при стартиране. dex2oat не може да прекомпилира променения jar. Изключването възстановява оригиналния jar. Влиза в сила при следващото пълно стартиране.</string>
+    <string name="catalog_download_checking">Проверка на връзката…</string>
+    <string name="catalog_download_title">Изтегляне на ROM</string>
+    <string name="catalog_download_failed">Изтеглянето е неуспешно: %1$s</string>
 </resources>

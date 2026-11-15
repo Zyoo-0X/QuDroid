@@ -523,4 +523,12 @@
     <string name="phantom_open_dev">개발자 옵션 열기</string>
     <string name="phantom_ignore">무시</string>
     <string name="phantom_never">다시 알리지 않음</string>
+    <string name="vs_netdebug">HTTP 디버거</string>
+    <string name="vs_netdebug_sub">게스트의 HTTP 및 HTTPS 요청을 기록하고 응답하거나 변경할 수 있습니다(메뉴 › HTTP 디버거). 디버깅용 CA를 게스트의 신뢰 저장소에 추가합니다. 다음 전체 시작부터 적용됩니다.</string>
+    <string name="m_netdebug">HTTP 디버거</string>
+    <string name="vs_skip_perm_wait">권한 컨트롤러 대기 건너뛰기(Android 10~13)</string>
+    <string name="vs_skip_perm_wait_sub">ARM 휴대폰의 x86 펌웨어용입니다. 권한 컨트롤러 앱이 너무 느려 60초 안에 응답하지 못하고 system_server가 종료되는 경우(\"Error granting/upgrading runtime permissions\")에 사용합니다. 펌웨어의 services.jar를 패치하여 부팅이 기본 런타임 권한 부여를 기다리지 않게 합니다. 이 경우 사전 설치된 앱은 부팅 시 해당 권한을 받지 못합니다. 패치된 jar는 dex2oat가 다시 컴파일하지 않습니다. 끄면 원래 jar로 복원됩니다. 다음 전체 부팅부터 적용됩니다.</string>
+    <string name="catalog_download_checking">링크 확인 중…</string>
+    <string name="catalog_download_title">ROM 다운로드 중</string>
+    <string name="catalog_download_failed">다운로드 실패: %1$s</string>
 </resources>

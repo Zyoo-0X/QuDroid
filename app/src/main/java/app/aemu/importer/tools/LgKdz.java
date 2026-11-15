@@ -233,11 +233,15 @@ final class LgKdz {
 
         File cabDir = new File(work, "cab");
         List<File> members;
+        long dllSize = -1;
         try (LgCab.Src src = encrypted ? LgCab.decrypting(f, key) : LgCab.plain(f)) {
             LgCab.Cab cab = LgCab.parse(src);
             for (LgCab.Member m : cab.members) {
                 log.accept("LG KDZ:   " + m.name + " (" + (m.size >> 10) + " KB)");
             }
+            // LGUP "WebDLL" packages (Optimus L9 II / D605 ...): the payload is a .wdb whose key comes from the size of the
+            // package's own LGUP_*.DLL (see decryptWdb); only that size is needed, the DLL itself is not unpacked
+            for (LgCab.Member m : cab.members) if (m.name.toLowerCase(Locale.US).endsWith(".dll")) dllSize = m.size;
             members = LgCab.extract(src, cab, cabDir, LgKdz::wantCabMember, log);
         }
         if (members.isEmpty()) throw new IOException("LG KDZ: the cabinet holds no firmware payload");
@@ -249,7 +253,16 @@ final class LgKdz {
             String lower = m.getName().toLowerCase(Locale.US);
             byte[] mag = readHead(m, 16);
             try {
-                if (isDz(mag) || isLegacyDz(mag) || (lower.endsWith(".dz") && mag.length >= 4)) {
+                if (lower.endsWith(".wdb")) {
+                    File dir = new File(work, "wdb" + (n++)); dir.mkdirs();
+                    File tot = new File(dir, m.getName().replaceFirst("(?i)\\.wdb$", "") + ".tot");
+                    decryptWdb(m, dllSize, tot, log);
+                    m.delete();                               // the encrypted copy is not needed any more
+                    try { out.addAll(FirmwareToolset.extract(tot, new File(dir, "out"), log)); }
+                    catch (IOException | RuntimeException ex) { throw ex; }
+                    catch (Exception ex) { throw new IOException(ex); }
+                    finally { tot.delete(); }
+                } else if (isDz(mag) || isLegacyDz(mag) || (lower.endsWith(".dz") && mag.length >= 4)) {
                     out.addAll(extractDz(m, new File(work, "dz" + (n++)), log));
                 } else if (mag.length >= 4 && isLgBin(u32(mag, 0))) {
                     File dir = new File(work, "bin" + (n++)); dir.mkdirs();
@@ -286,10 +299,82 @@ final class LgKdz {
         return out;
     }
 
+    // ================================================================== LGUP .wdb (WebDLL packages)
+
+    /**
+     * An LGUP ".wdb" (the payload of the 2012-2015 Optimus-era KDZ cabinets, next to LGUP_xxx.DLL and a .wdh), unpacked to the
+     * LG .tot it carries. Layout, as LGExtract 0.2.1 reads it:
+     * <pre>
+     *   u32 n, n bytes   container header   (RC4)  u32 size, u32 count, name strings
+     *   u32 n, u32, n-4  file header         (RC4 from the 2nd field on)
+     *   u32              size of the unpacked file
+     *   ...              the file: zlib stream, the whole of it one RC4 stream (a footer follows and is ignored)
+     * </pre>
+     * Every RC4 stream starts afresh with the same key: MD5 of a password made from the decimal size of the package's DLL, digit
+     * by digit {@code (digit char + {1,1,3,8,4,1}[i] + '0') & 255} (LGExtract warns above six digits and so does this).
+     */
+    static void decryptWdb(File wdb, long dllSize, File out, Consumer<String> log) throws IOException {
+        if (dllSize <= 0) throw new IOException("LG WDB: the package has no .dll to take the key from");
+        String sz = Long.toString(dllSize);
+        if (sz.length() > 6) throw new IOException("LG WDB: the key of a " + sz.length() + "-digit DLL size is not known");
+        final int[] add = {1, 1, 3, 8, 4, 1};
+        byte[] pw = new byte[sz.length()];
+        for (int i = 0; i < pw.length; i++) pw[i] = (byte) (sz.charAt(i) + add[i] + 0x30);
+        final byte[] key;
+        try { key = MessageDigest.getInstance("MD5").digest(pw); }
+        catch (java.security.NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
+
+        try (RandomAccessFile r = new RandomAccessFile(wdb, "r")) {
+            byte[] b4 = new byte[4];
+            r.readFully(b4);
+            long hl = u32(b4, 0);
+            if (hl < 16 || hl > 4096) throw new IOException("LG WDB: bad container header");
+            byte[] hdr = new byte[(int) hl];
+            r.readFully(hdr);
+            new LgCab.Rc4(key).crypt(hdr, 0, hdr.length);
+            if (u32(hdr, 0) != hl || u32(hdr, 4) < 1 || u32(hdr, 4) > 64) {
+                throw new IOException("LG WDB: the container header does not decrypt (wrong key: DLL size " + dllSize + ")");
+            }
+            long files = u32(hdr, 4);
+            if (files > 1) log.accept("LG WDB: " + files + " files listed, only the first is unpacked");
+            r.readFully(b4);
+            long fl = u32(b4, 0);
+            if (fl < 8 || fl > 65536) throw new IOException("LG WDB: bad file header");
+            r.seek(r.getFilePointer() + fl);                  // file header: nothing in it is needed
+            r.readFully(b4);                                  // unpacked size
+            final long unpacked = u32(b4, 0);
+            log.accept("LG WDB: " + (unpacked >> 20) + " MB unpacked payload");
+
+            final LgCab.Rc4 rc = new LgCab.Rc4(key);
+            InputStream raw = new BufferedInputStream(new java.io.FileInputStream(r.getFD()), 1 << 20);
+            InputStream dec = new java.io.FilterInputStream(raw) {
+                @Override public int read() throws IOException {
+                    byte[] one = new byte[1];
+                    return read(one, 0, 1) < 0 ? -1 : one[0] & 255;
+                }
+                @Override public int read(byte[] b, int off, int len) throws IOException {
+                    int k = in.read(b, off, len);
+                    if (k > 0) rc.crypt(b, off, k);
+                    return k;
+                }
+            };
+            long total = 0;
+            try (InputStream z = new InflaterInputStream(dec, new Inflater(), 1 << 16);
+                 java.io.OutputStream o = new java.io.BufferedOutputStream(new java.io.FileOutputStream(out), 1 << 20)) {
+                byte[] buf = new byte[1 << 20];
+                for (int k; (k = z.read(buf)) > 0; ) { o.write(buf, 0, k); total += k; }
+            } catch (java.util.zip.ZipException e) {
+                throw new IOException("LG WDB: payload does not inflate (" + e.getMessage() + ")");
+            }
+            if (total < 4) throw new IOException("LG WDB: empty payload");
+            if (total != unpacked) log.accept("LG WDB: warning, " + total + " bytes unpacked, the header says " + unpacked);
+        }
+    }
+
     /** What is worth unpacking from the cabinet: the firmware containers by name, and anything big enough to be one. */
     private static boolean wantCabMember(LgCab.Member m) {
         String n = m.name.toLowerCase(Locale.US);
-        return n.endsWith(".dz") || n.endsWith(".bin") || n.endsWith(".tot") || n.endsWith(".img") || m.size >= (1L << 20);
+        return n.endsWith(".dz") || n.endsWith(".wdb") || n.endsWith(".bin") || n.endsWith(".tot") || n.endsWith(".img") || m.size >= (1L << 20);
     }
 
     private static byte[] readHead(File f, int n) throws IOException {

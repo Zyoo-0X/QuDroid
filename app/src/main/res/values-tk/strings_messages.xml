@@ -232,4 +232,7 @@
     <string name="update_err_wrong_variant">Täzelenme APK-sy bu programmanyň warianty bilen gabat gelmeýär</string>
     <string name="update_err_wrong_package">Ýüklenip alnan APK-nyň programma paketi nädogry</string>
     <string name="catalog_err_too_many_lines">Katalog 10000 setirden geçýär</string>
+    <string name="ota_squash_files_modified">/system içindäki %1$d faýl programma ýa-da siz tarapyndan üýtgedildi we olary gaýtadan gurup bolmaýar, meselem %2$s. SquashFS ulgam keşbini diňe üýtgedilmedik faýllardan gaýtadan gurup bolýar. Hiç zat üýtgedilmedi.</string>
+    <string name="imp_unreadable_mbr">%1$s: MBR bölüm tablisasyny okap bolmaýar</string>
+    <string name="imp_no_system_partition_in_mbr">%1$s: MBR içinde ulgam bölümi ýok</string>
 </resources>

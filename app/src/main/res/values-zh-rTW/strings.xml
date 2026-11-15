@@ -523,4 +523,12 @@
     <string name="phantom_open_dev">開啟開發人員選項</string>
     <string name="phantom_ignore">略過</string>
     <string name="phantom_never">不再提醒</string>
+    <string name="vs_netdebug">HTTP 偵錯工具</string>
+    <string name="vs_netdebug_sub">記錄訪客的 HTTP 與 HTTPS 要求，並可回應或修改這些要求（選單 › HTTP 偵錯工具）。會將偵錯用 CA 放入訪客的信任存放區。下次完整啟動時生效。</string>
+    <string name="m_netdebug">HTTP 偵錯工具</string>
+    <string name="vs_skip_perm_wait">略過等待權限控制器（Android 10-13）</string>
+    <string name="vs_skip_perm_wait_sub">適用於 ARM 手機上的 x86 韌體：權限控制器應用程式回應太慢，無法在 60 秒內回應，導致 system_server 被終止（「Error granting/upgrading runtime permissions」）。會修補韌體的 services.jar，讓開機時不再等待預設執行階段權限的授予；預先安裝的應用程式因此不會在開機時取得這些權限。dex2oat 不會重新編譯已修補的 jar。關閉後會還原原始 jar。下次完整開機時生效。</string>
+    <string name="catalog_download_checking">正在檢查連結…</string>
+    <string name="catalog_download_title">正在下載 ROM</string>
+    <string name="catalog_download_failed">下載失敗：%1$s</string>
 </resources>

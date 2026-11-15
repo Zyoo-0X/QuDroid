@@ -512,7 +512,10 @@ class Yaffs2Reader(private val src: RandomSource, private val checkCancelled: ()
         private fun decodeRowTags(o: ByteArray, page: Int, out: ByteBuffer) {
             fun b(i: Int) = o[i].toInt() and 0xff
             if (b(2) == 0xff && b(3) == 0xff && b(4) == 0xff) { out.putInt(0, -1); return }
-            val id = ((b(12).inv() and 0xff) shl 8) or b(15)
+            // Object id: low byte in row 0 (byte 15), high bits in row 1 (byte 18). Byte 12 is NOT part of the id (it is a
+            // constant 0xfe/0xff flag); reading it as the high byte folded every id into 256..511, so the objects of a
+            // partition with more than 256 entries overwrote each other (a pre-1.0 Sooner system lost /bin and /app).
+            val id = (b(18) shl 8) or b(15)
             val flags = b(35)
             var obj = id
             var chunk = b(30) or (b(31) shl 8)

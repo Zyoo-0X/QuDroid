@@ -526,4 +526,12 @@
     <string name="phantom_open_dev">ڈویلپر آپشنز کھولیں</string>
     <string name="phantom_ignore">نظر انداز کریں</string>
     <string name="phantom_never">دوبارہ یاد نہ دلائیں</string>
+    <string name="vs_netdebug">HTTP ڈیبگر</string>
+    <string name="vs_netdebug_sub">مہمان کی HTTP اور HTTPS درخواستیں لاگ کرتا ہے اور ان کا جواب دے سکتا یا انہیں تبدیل کر سکتا ہے (مینو › HTTP ڈیبگر)۔ مہمان کے ٹرسٹ اسٹور میں ایک ڈیبگنگ CA شامل کرتا ہے۔ اگلی مکمل شروعات پر لاگو ہوتا ہے۔</string>
+    <string name="m_netdebug">HTTP ڈیبگر</string>
+    <string name="vs_skip_perm_wait">اجازتوں کے کنٹرولر کا انتظار چھوڑیں (Android 10-13)</string>
+    <string name="vs_skip_perm_wait_sub">ARM فون پر x86 فرم ویئر کے لیے، جہاں اجازتوں کے کنٹرولر کی ایپ 60 سیکنڈ میں جواب دینے کے لیے بہت سست ہے اور system_server بند ہو جاتا ہے (\"Error granting/upgrading runtime permissions\")۔ فرم ویئر کی services.jar کو پیچ کرتا ہے تاکہ بوٹ ڈیفالٹ رن ٹائم اجازتوں کا انتظار نہ کرے؛ اس صورت میں پہلے سے انسٹال شدہ ایپس کو بوٹ پر وہ اجازتیں نہیں ملتیں۔ dex2oat کو پیچ شدہ jar دوبارہ کمپائل کرنے سے روکا جاتا ہے۔ بند کرنے پر اصل jar بحال ہو جاتی ہے۔ اگلے مکمل بوٹ پر لاگو ہوتا ہے۔</string>
+    <string name="catalog_download_checking">لنک چیک کیا جا رہا ہے…</string>
+    <string name="catalog_download_title">ROM ڈاؤن لوڈ ہو رہا ہے</string>
+    <string name="catalog_download_failed">ڈاؤن لوڈ ناکام: %1$s</string>
 </resources>

@@ -66,9 +66,22 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
      * EGL, so the GPU and hardware UI options are off for it meanwhile (software rendering in the guest).
      */
     val settings = img.settings.let { s ->
-        // (on the native engine the GPU bridge is an arm64 library the translated programs cannot load: off for a foreign firmware there for good)
+        // Added for AEmulator Plus (2026-11-14): an x86 / x86-64 guest runs under the translator, which cannot keep the JIT's code cache
+        // (one memfd mapped twice) coherent: Android 10 x86-64 SystemUI died on every start in "oat_quick_method_header.cc:44 Failed to
+        // find Dex offset for PC offset 0x5b ... TunerServiceImpl.addTunable" and com.android.phone aborted in "Could not find dex_pc",
+        // both with /memfd:/jit-cache frames. So the JIT is off by default for such an image: images made earlier (stored jit=true,
+        // which was only the old default) are switched off once, then the setting is the user's (it can be turned on again).
+        val marker = File(paths.dir, "jit-x86-default")
+        if ((img.arch == GuestArch.X86 || img.arch == GuestArch.X86_64) && !marker.exists()) {
+            runCatching { marker.writeText("1"); if (s.jit) ImageStore.update(ctx, img.id) { it.copy(settings = it.settings.copy(jit = false)) } }
+            s.copy(jit = false)
+        } else s
+    }.let { s ->
+        // (on the native engine the GPU bridge is an arm64 library the translated programs cannot load: off for a foreign firmware there for good,
+        // except an x86-64 one: since 2026-11-14 the bridge has an x86-64 build (native/glbridge/build64-x86_64.sh, EngineAssets.X86_64_GPU_BRIDGE))
         if (img.arch != GuestArch.ARM && s.gpu &&
-            (img.engine == Engine.N64 || !EngineAssets.exists(ctx, "engines/${Engine.KK.id}${img.arch.assetSuffix}/libGLES.so"))) s.copy(gpu = false, hwui = false) else s
+            !(if (img.engine == Engine.N64) img.arch == GuestArch.X86_64 && EngineAssets.exists(ctx, EngineAssets.X86_64_GPU_BRIDGE)
+              else EngineAssets.exists(ctx, "engines/${Engine.KK.id}${img.arch.assetSuffix}/libGLES.so"))) s.copy(gpu = false, hwui = false) else s
     }.let { s ->
         // Broadcom V3D firmware: SurfaceFlinger composes into fb0 through the emulated /dev/v3d, never through EGL, so the in-app GPU
         // bridge would show a blank surface. Software path (fb0 view) only.
@@ -83,6 +96,30 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
 
     @Volatile var state = State.STOPPED
         private set
+
+    /**
+     * Modified for AEmulator Plus (2026-11-15): the guest's adbd has initialized. Shell access (the VM menu's shell and the
+     * network adb server) follows this flag, not boot completion, so it works through a boot that never finishes: a stuck
+     * zygote or system_server is exactly when a shell is needed. It is set once, when init would start adbd (the guest root is
+     * prepared and every program the shell runs can start) and cleared when the machine stops or starts again.
+     * The firmware's own adbd needs USB gadget nodes, so the host answers for it (see AdbServer).
+     */
+    @Volatile var adbdUp = false
+        private set
+    @Volatile var adbdAt = 0L
+        private set
+    private val adbdListeners = CopyOnWriteArrayList<(Boolean) -> Unit>()
+    fun onAdbd(l: (Boolean) -> Unit) { adbdListeners.add(l) }
+    fun removeOnAdbd(l: (Boolean) -> Unit) { adbdListeners.remove(l) }
+    private fun setAdbd(up: Boolean) {
+        if (adbdUp == up) return
+        adbdUp = up
+        adbdAt = if (up) System.currentTimeMillis() else 0L
+        adbdListeners.forEach { runCatching { it(up) } }
+    }
+
+    /** Shell and adb are offered while the guest's adbd is up and the machine is on its way up or up (not recovery). */
+    val adbAvailable: Boolean get() = VmUiPolicy.adbAvailable(state.name, adbdUp, recoveryMode)
     @Volatile var bootAt = 0L
         private set
     @Volatile var bootDoneAt = 0L
@@ -195,6 +232,8 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
     val cameraFeed = CameraFeed(ctx, paths, ::log)
     @Volatile private var lmk: GuestLmk? = null
     val net = NetProxy(ctx, paths, ::log)
+    /** the HTTP debugger of this VM (see app.aemu.netdebug); only started when the setting is on */
+    val netDebug = app.aemu.netdebug.NetDebugger(File(paths.dir, "netdebug"), File(ctx.filesDir, "netdebug-ca"), ::log)
     private val dns = DnsProxy(paths, img.api, ::log, img.engine == Engine.N64 && Kernel64.forApi(img.api).dnsLayoutProbe)
     /** Cupcake/Donut (API <= 4) have no multitouch: their EventHub only accepts ABS_X/ABS_Y/ABS_PRESSURE + BTN_TOUCH. */
     private fun singleTouchWanted(s: VmSettings) = s.mtMode == 4 || img.api <= 4
@@ -322,6 +361,7 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
         }
         stopping = false
         failure = null
+        setAdbd(false)
         setState(State.PREPARING)
         try {
             if (recoveryMode) doRecovery() else if (lowPowerBoot) doCharging() else if (nativeBoot) doMmi() else doBoot()
@@ -849,19 +889,28 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
                 overrides["ro.product.cpu.abilist"] = abi32
                 overrides["ro.product.cpu.abilist64"] = ""
                 log("props: 32-bit firmware, ro.product.cpu.abilist32=$abi32")
-            } else if (n64Has32) {
-                overrides["ro.zygote"] = "zygote64_32"
-                overrides["ro.product.cpu.abilist"] = "arm64-v8a,armeabi-v7a,armeabi"
-                overrides["ro.product.cpu.abilist64"] = "arm64-v8a"
-                overrides["ro.product.cpu.abilist32"] = "armeabi-v7a,armeabi"
             } else {
-                overrides["ro.zygote"] = "zygote64"
-                overrides["ro.product.cpu.abilist"] = "arm64-v8a"
-                overrides["ro.product.cpu.abilist64"] = "arm64-v8a"
-                overrides["ro.product.cpu.abilist32"] = ""
+                // the lists name the FIRMWARE's instruction set (x86-64 firmware: x86_64,x86), not the phone's: with arm64-v8a
+                // PackageManagerService refuses ExtServices and NetworkStack (-113, no matching ABI), system_server dies with
+                // "Required services extension package is missing" and zygote exits with 137 (see [NativeAbiLists])
+                val has32 = n64Has32
+                val abis = NativeAbiLists.forArch(img.arch, has32)
+                overrides["ro.zygote"] = if (has32) "zygote64_32" else "zygote64"
+                overrides["ro.product.cpu.abilist"] = abis.abilist
+                overrides["ro.product.cpu.abilist64"] = abis.abilist64
+                overrides["ro.product.cpu.abilist32"] = abis.abilist32
+                if (img.arch.foreign) log("props: ${img.arch.id} firmware, ro.product.cpu.abilist=${abis.abilist}")
             }
         }
-        overrides["dalvik.vm.execution-mode"] = if (s.jit) "int:jit" else "int:fast"
+        // (an x86 guest starts with the JIT off, see "settings": the translator does not keep the JIT's code cache coherent; the switch
+        // in the settings still turns it on)
+        val jitOn = s.jit
+        overrides["dalvik.vm.execution-mode"] = if (jitOn) "int:jit" else "int:fast"
+        // Added for AEmulator Plus (2026-11-13): execution-mode is a Dalvik property; ART's zygote turns it into "-Xint:jit" /
+        // "-Xint:fast" and still starts with -Xusejit:true, so the JIT switch did nothing on an ART guest. The JIT's code
+        // cache (a memfd mapped twice) is what system_server died in on an Android 10 guest ("SIGILL ... /memfd:/jit-cache
+        // BasePermission.writeLPr", the translator executing stale/garbage code). ART's own switch is dalvik.vm.usejit.
+        if (!jitOn && img.api >= 21) overrides["dalvik.vm.usejit"] = "false"
         // Modified for AEmulator Plus (2026-11-04): "host / max" (negative) resolves to the host's RAM
         val chosenRamMb = RamChoice.resolve(s.ramMb)
         if (s.lowRam || chosenRamMb in 1..768) overrides["ro.config.low_ram"] = "true"
@@ -935,7 +984,14 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
             // direct-mode builds (the installer only puts the bridge in where that gralloc is in place). NOT boot-tested on a
             // 32-bit tree. A file "glmode" in the image's directory still decides when there is one: "2" or "1" go back.
             overrides["debug.aemu.gl"] = File(paths.dir, "glmode").takeIf { it.isFile }?.readText()?.trim()?.takeIf { it.isNotEmpty() }
-                ?: if (pure32Gpu) { if (pure32HwcShowsGpuFrames(paths.root)) PURE32_GPU_MODE else "2" } else kernel.gpuBridgeMode
+                ?: if (pure32Gpu) { if (pure32HwcShowsGpuFrames(paths.root)) PURE32_GPU_MODE else "2" }
+                // x86-64 firmware: there is no SwiftShader for it, so the compositor's context is made on the phone's GPU whatever the mode
+                // (guest.c solo()), and what it draws lives in the host's copy of the client target. Changed for AEmulator Plus (2026-11-14):
+                // the engine's gralloc wrapper (native/x86_64/gralloc2, -DAEMU_META) now writes the bridge note into its buffers and the
+                // engine's HWC2 module shows the host's frame (direct mode, OP_PRESENT) instead of copying guest memory - which nothing wrote
+                // to - into fb0 (fb0 held only 000000ff pixels, the screen stayed black). Mode 1 (the old value here) cannot work without
+                // SwiftShader: the compositor was on the GPU all the same, with no note to carry its frame to the screen.
+                else kernel.gpuBridgeMode
             if (pure32Gpu && overrides["debug.aemu.gl"] == "2" && !pure32HwcShowsGpuFrames(paths.root))
                 log("GPU (32-bit firmware): this tree's hwcomposer only copies guest memory to fb0 (no direct mode), compositor stays on SwiftShader")
             if (pure32Gpu) log("GPU (32-bit firmware): debug.aemu.gl=${overrides["debug.aemu.gl"]}" + when (overrides["debug.aemu.gl"]) {
@@ -1125,6 +1181,14 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
             }
         }
         if (!props.prepare(overrides, later, if (engine == Engine.N64) kernel.propAreaSize else PropArea.SIZE)) error("property area not ready")
+        // Added for AEmulator Plus (2026-11-15): a pre-1.0 runtime picks its virtual machine with runtime.vm (JamVM or Dalvik).
+        // The property comes from the tree's own build.prop; it is put into the area again here so that an image imported
+        // before JamVM was recognised (template written without it) and a tree with no build.prop value (class-file jars and
+        // libjamvm.so only) start the machine that can load them. The guest asks for it over the pre-1.0 property protocol.
+        LegacyFirmware.runtimeVm(paths.root)?.let { vm ->
+            if (props.get("runtime.vm") != vm) props.put("runtime.vm", vm)
+            log("runtime: ${if (vm == LegacyFirmware.VM_JAM) "JamVM" else "Dalvik"} (runtime.vm=$vm)")
+        }
         // Added for AEmulator Plus (2026-11-01). The generic system part of a firmware says a 36 MB Java heap
         // (dalvik.vm.heapsize=36m) and only the vendor's build.prop has the phone's real sizes (see above). A tree
         // with no vendor build.prop at all (log: "props: vendor build.prop files=[]") keeps the 36 MB, zygote starts
@@ -1241,7 +1305,7 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
             if (kernel.ramBudget) f.writeText((GuestRunner.guestRamMb(img.api, s.ramMb) * 1024L).toString()) else f.delete()
         }
         lmk = GuestLmk(paths.root, s.lowRam, ::log, RamChoice.resolve(s.ramMb), MemoryMode.parse(s.memoryMode)).also { it.start() }
-        val netCfg = if (s.netProxy) net.start() else GuestRunner.NetConfig()
+        val netCfg = startNetDebug(s) ?: if (s.netProxy) net.start() else GuestRunner.NetConfig()
         runner.sdcardHost = sd
         val r = GuestRunner(paths, img.copy(settings = settings), netCfg.copy(glPath = if (s.gpu) "/dev/socket/gl" else null)).also {
             it.sdcardHost = sd
@@ -1345,8 +1409,21 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
         // 5. службы гостя по плану из init.rc прошивки
         val basePlan = servicePlan().filter { it.name !in InitPlan.NEVER_START }.ifEmpty { InitPlan.fallback(img, paths.root) }
         // Samsung 2.x boot logo + PowerOn sound (playlogos1); images imported earlier have no such entry in their saved plan
-        val plan = if (File(paths.bin, BootMediaServices.LEGACY_LOGO_OFF).exists()) basePlan
-                   else BootMediaServices.withLegacyLogo(basePlan, paths.root, img.api)
+        val logoPlan = if (File(paths.bin, BootMediaServices.LEGACY_LOGO_OFF).exists()) basePlan
+                       else BootMediaServices.withLegacyLogo(basePlan, paths.root, img.api)
+        // Added for AEmulator Plus (2026-11-14): an x86 / x86-64 firmware with no keymaster HAL service of its own (a system-only
+        // image such as the Android 10 SDK one: /vendor has no HAL at all, and the engine's keymaster services are ARM programs that
+        // are not installed for a translated firmware). The real keystore daemon then asks hwservicemanager for
+        // android.hardware.keymaster@4.0 and @3.0, finds neither, and aborts ("Check failed: kmDevices[TRUSTED_ENVIRONMENT]
+        // Error no viable keymaster device found", exit 134); it was restarted twelve times and each start cost seconds of
+        // translated start-up. It is not started at all: the stand-in below (aemu-keystore, which registers
+        // "android.security.keystore" and answers "no error") is what system_server needs to come up, as on a 32-bit board
+        // without a keymaster HAL. A firmware that does bring a keymaster service keeps its keystore.
+        val plan = if (engine == Engine.N64 && img.arch.foreign && img.api in 23..32 && logoPlan.any { it.name == "keystore" } &&
+            logoPlan.none { s -> isKeymasterHal(s.name) || isKeymasterHal(s.argv.firstOrNull().orEmpty()) }) {
+            log("keymaster: the firmware has no keymaster HAL service, so the keystore daemon is not started (it would abort in every start); the stand-in serves \"android.security.keystore\"")
+            logoPlan.filter { it.name != "keystore" }
+        } else logoPlan
         if (plan.any { it.name == BootMediaServices.LEGACY_LOGO }) log("boot logo: playlogos1 will run (Samsung 2.x boot animation and sound)")
         var glDone = false
         val wifiOn = settings.wifi && wifiSupported && File(paths.root, WifiEmu.JAR_PATH).isFile
@@ -1357,6 +1434,13 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
         val stopAfter = if (engine == Engine.N64 && kernel.syncLog) runCatching { File(paths.root, "dev/.aemu-stop-after").readText().trim().toInt() }.getOrNull() else null
         if (stopAfter != null) log("stop-after $stopAfter of: " + plan.filter { !it.onDemand }.mapIndexed { i, s -> "$i ${s.name}" }.joinToString())
         var started = 0
+        // The guest's adbd is initialized here: binder is up, the linker config and class paths are written, the runner exists,
+        // so `sh` and everything it execs start. Real init starts adbd at this point (before zygote); from now on the shell is
+        // offered, however the rest of the boot goes.
+        if (!stopping) {
+            setAdbd(true)
+            log("★ adbd initialized ${(System.currentTimeMillis() - bootAt) / 1000} s after start: adb shell is available before the system finishes booting")
+        }
         for (svc in plan) {
             if (stopping) return
             if (svc.onDemand) { props.put("init.svc.${svc.name}", "stopped"); continue }
@@ -1672,6 +1756,29 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
             }
         }
     }
+    /**
+     * The HTTP debugger (setting "HTTP debugger"): starts the proxy and the DNS answerer, puts the CA into the guest's trust
+     * store and returns the network settings that point the engine at them; null when the setting is off (the CA is taken out
+     * of the store again then). Native engine: the runner sends every outgoing TCP connection to the header door and UDP port 53 to
+     * the DNS port. qemu engine: qemu's own redirect of ports 80, 443 and 53, with loopback stand-in addresses for names.
+     */
+    private fun startNetDebug(s: VmSettings): GuestRunner.NetConfig? {
+        if (!s.netDebug) {
+            runCatching { app.aemu.netdebug.GuestTrust.uninstall(paths.root, netDebug.ca) }
+            dns.debugger = null
+            return null
+        }
+        return runCatching {
+            val qemu = engine != Engine.N64
+            val ports = netDebug.start(qemuNames = qemu, dnsUdp = true)
+            val done = app.aemu.netdebug.GuestTrust.install(paths.root, netDebug.ca, ::log)
+            log("netdebug: CA installed in " + (done.joinToString().ifEmpty { "no trust store found" }))
+            dns.debugger = netDebug
+            if (qemu) GuestRunner.NetConfig(http80 = ports.http80, https443 = ports.https443, dns53 = ports.dnsUdp)
+            else GuestRunner.NetConfig(netDbg = ports.header, netDns = ports.dnsUdp)
+        }.onFailure { log("netdebug: cannot start: $it") }.getOrNull()
+    }
+
 
     private fun startBinder() {
         prepareBinderGuard()
@@ -1760,6 +1867,14 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
     }
 
     /** guest files this kernel ships (asset names) */
+    /**
+     * Modified for AEmulator Plus (2026-11-14): a service of the firmware's plan that is a keymaster HAL. /system/bin/wait_for_keymaster
+     * (system/etc/init/wait_for_keymaster.rc, which every Android 9+ tree has) carries the word too but is only a program that waits
+     * for a keymaster HAL; it made the check above think the firmware had one, so the keystore daemon was started and aborted in every
+     * start (\"Check failed: kmDevices[TRUSTED_ENVIRONMENT]\", twelve times) on a system-only x86 image.
+     */
+    private fun isKeymasterHal(nameOrPath: String): Boolean = nameOrPath.contains("keymaster") && !nameOrPath.contains("wait_for_keymaster")
+
     private val engineFiles: Set<String> by lazy { listOf("engines/n64-${kernel.tag}", kernel.gsiAssets).flatMap { runCatching { EngineAssets.layerNames(ctx, it) }.getOrNull().orEmpty() }.toSet() }
 
     /**
@@ -1904,8 +2019,10 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
         // The board's own power HAL (MediaTek mtkpower-service) would replace the engine's IPower/default and then never answer
         // (no binder thread pool): system_server blocks in PowerManagerService for ever. Only when the engine's is in the tree.
         if (engine == Engine.N64 && kernel.treble && TreeFixer.BOARD_POWER_SERVICE.matches(svc.argv.first().substringAfterLast('/')) &&
-            listOf("vendor/bin/hw", "system/vendor/bin/hw").any { File(paths.root, "$it/android.hardware.power-service.aemu").isFile } &&
-            svc.argv.first().substringAfterLast('/') != "android.hardware.power-service.aemu") {
+            listOf("vendor/bin/hw", "system/vendor/bin/hw").any { d ->
+                File(paths.root, "$d/android.hardware.power-service.aemu").isFile || File(paths.root, "$d/android.hardware.power@1.0-service").isFile } &&
+            svc.argv.first().substringAfterLast('/') != "android.hardware.power-service.aemu" &&
+            svc.argv.first().substringAfterLast('/') != "android.hardware.power@1.0-service") {
             log("· ${svc.name}: the board's power HAL, skipped (the engine's power service serves IPower)")
             return
         }
@@ -3002,6 +3119,9 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
                             // zygote kills itself with SIGKILL when system_server dies, so 137 is only the end of the chain
                             if (heapAbort)
                                 failure = Msg("system_server aborted: its garbage collector found a corrupt heap (GC tried to mark invalid reference). This firmware's boot image was built without a read barrier but the guest runs the concurrent-copying collector; zygote exited with 137 as a result. See the first \"Runtime aborting\" in the guest log")
+                            if (code == 137 && guestLogHas("Required services extension package is missing"))
+                                failure = Msg("system_server died in PackageManagerService: the services extension package (ExtServices) was not installed" +
+                                    if (guestLogHas("errorCode=-113")) " because its native libraries match none of the guest's ABIs (INSTALL_FAILED_NO_MATCHING_ABIS); see ro.product.cpu.abilist in the props lines of this log" else "; see the PackageManager lines of the guest log")
                             if (code == 137 && guestLogHas("Failure starting system services"))
                                 failure = Msg("system_server failed to start its services (zygote exited with 137 as a result); see the first BOOT FAILURE in the guest log", R.string.vmfail_system_server_services)
                             if (code == 137 && guestLogHas("IKeystoreService"))
@@ -3090,6 +3210,18 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
                     // firmware's compositor against the engine's libraries and the fix only worked after the user started
                     // the VM by hand, with nothing on screen saying so. Restart the whole VM at once instead; the marker the
                     // swap leaves makes the tree fixer lay the tree out for the firmware's own SurfaceFlinger.
+                    // Added for AEmulator Plus (2026-11-15): a build of 16 whose libui serves no HIDL mapper (aconfig flag
+                    // require_gralloc4_or_newer) aborts before its first frame with "gralloc-mapper is missing". Seen, not guessed: only
+                    // then the engine's gralloc5 is laid into the tree (TreeFixer, marker gralloc5) and the VM starts again at once, so
+                    // firmware that works on the engine's mapper@2.0 is never touched.
+                    if (name == "surfaceflinger" && code == 134 && bootDoneAt == 0L && engine == Engine.N64 && kernel == Kernel64.A16 &&
+                        needsGralloc5()) {
+                        if (restartForGralloc5.compareAndSet(false, true)) {
+                            log("✖ surfaceflinger: no graphics mapper 4/5 (gralloc-mapper is missing), restarting the VM now with the engine's gralloc5")
+                            onPower?.invoke(true, "")
+                        }
+                        continue
+                    }
                     if (name == "surfaceflinger" && code == 139 && bootDoneAt == 0L && engine == Engine.N64 && useFirmwareSurfaceFlinger()) {
                         if (restartForFirmwareSurfaceFlinger.compareAndSet(false, true)) {
                             log("✖ surfaceflinger: restarting the VM now so the whole tree is set up for the firmware's own SurfaceFlinger")
@@ -3232,6 +3364,25 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
      * False when that was already done or there is nothing to put back.
      */
     private val restartForFirmwareSurfaceFlinger = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val restartForGralloc5 = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /**
+     * Added for AEmulator Plus (2026-11-15). True once, when SurfaceFlinger's own log says it died for want of a graphics mapper and the
+     * engine's gralloc5 is not yet in the tree: leaves the marker the tree fixer lays the layer out for. False when the marker is
+     * already there (the mapper is served and something else is wrong) or the log says something else.
+     */
+    private fun needsGralloc5(): Boolean {
+        val dir = File(paths.root, "system/.aemu-parked")
+        val marker = File(dir, "gralloc5")
+        if (marker.exists()) { log("surfaceflinger: aborted without a mapper although the engine's gralloc5 is in use; nothing left to try"); return false }
+        val said = runCatching {
+            val f = File(paths.bin, "surfaceflinger.log")
+            val t = f.readText(Charsets.ISO_8859_1)
+            t.substring(maxOf(0, t.length - 65536)).contains("gralloc-mapper is missing")
+        }.getOrDefault(false)
+        if (!said) return false
+        return runCatching { dir.mkdirs(); marker.writeText("1"); true }.getOrElse { log("gralloc5: marker not written: ${it.message}"); false }
+    }
 
     private fun useFirmwareSurfaceFlinger(): Boolean {
         val dir = File(paths.root, "system/.aemu-parked")
@@ -3484,6 +3635,7 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
             step("legacyBootWatch") { stopLegacyBootWatch() }
             step("kill") { killAll() }
             step("adb") { adb.stop() }
+            setAdbd(false)
             step("props") { props.stop() }
             step("zygoteCompat") { zygoteCompat.stop() }
             step("tombstonedTrace") { tombstonedTrace.stop() }
@@ -3493,6 +3645,7 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
             step("vold") { vold.stop() }
             step("audio") { audio.stop() }
             step("net") { net.stop() }
+            step("netdebug") { netDebug.stop(); dns.debugger = null }
             step("dns") { dns.stop() }
             step("events") { events.stop() }
             step("logd") { logd.stop() }
@@ -3618,7 +3771,7 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
             ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() && is32(it) }
         if (!combined.isNullOrEmpty()) return combined.joinToString(",")
         val abi = (all["ro.product.cpu.abi"] ?: all["ro.product.cpu.abi2"])?.takeIf { is32(it) }
-        return if (abi != null && abi != "armeabi") "$abi,armeabi" else "armeabi-v7a,armeabi"
+        return if (abi != null) NativeAbiLists.pure32FromAbi(img.arch, abi) else NativeAbiLists.pure32Fallback(img.arch)
     }
 
     /** What init of 10+ does after reading the property files: ro.product.<what> from the first partition that has

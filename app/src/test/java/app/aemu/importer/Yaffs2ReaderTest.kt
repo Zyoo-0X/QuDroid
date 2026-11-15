@@ -96,6 +96,32 @@ class Yaffs2ReaderTest {
             fs.walk { _, node -> val out = ByteArrayOutputStream(); fs.copy(node, out); assertArrayEquals(first + last, out.toByteArray()) }
         }
     }
+    /** HTC Sooner "sector row" spare layout: object id = byte 15 (low) + byte 18 (high); byte 12 is a constant flag. */
+    private fun rowPage(page: ByteArray, id: Int, chunk: Int, seq: Int = 0x1000): ByteArray {
+        val out = page.copyOf()
+        for (i in 2048 until 2112) out[i] = 0xff.toByte()
+        fun set(i: Int, v: Int) { out[2048 + i] = v.toByte() }
+        set(2, seq and 0xff); set(3, (seq shr 8) and 0xff); set(4, (seq shr 16) and 0xff)
+        set(12, 0xfe); set(14, 0); set(15, id and 0xff); set(18, (id shr 8) and 0xff)
+        set(30, chunk and 0xff); set(31, (chunk shr 8) and 0xff); set(35, 0)
+        return out
+    }
+    @Test fun rowLayoutKeepsObjectsWhoseIdsShareTheLowByte() {
+        // ids 0x101 / 0x201 / 0x301 differ only in byte 18; with the id folded into 256..511 they overwrote each other
+        val a = "alpha".toByteArray(); val b = "beta".toByteArray()
+        val fs = Yaffs2Reader(image(
+            rowPage(header(1, 1, ""), 1, 0),
+            rowPage(header(0x101, 1, "app"), 0x101, 0),
+            rowPage(header(0x201, 1, "bin"), 0x201, 0),
+            rowPage(header(0x105, 0x101, "a.txt", 1, a.size), 0x105, 0),
+            rowPage(data(0x105, 1, a), 0x105, 1),
+            rowPage(header(0x205, 0x201, "sh", 1, b.size), 0x205, 0),
+            rowPage(data(0x205, 1, b), 0x205, 1)))
+        assertTrue(fs.geometry.rows)
+        val f = files(fs)
+        assertEquals(setOf("app", "bin", "app/a.txt", "bin/sh"), f.keys)
+        assertArrayEquals(a, f.getValue("app/a.txt")); assertArrayEquals(b, f.getValue("bin/sh"))
+    }
     @Test fun detectsTagOffsetInsideTheSpareArea() {
         for (offset in listOf(2, 8)) {
             val fs = Yaffs2Reader(image(header(1, 1, "", tagOffset = offset),

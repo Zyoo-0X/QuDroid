@@ -529,4 +529,12 @@
     <string name="phantom_open_dev">Адкрыць параметры распрацоўшчыка</string>
     <string name="phantom_ignore">Ігнараваць</string>
     <string name="phantom_never">Больш не нагадваць</string>
+    <string name="vs_netdebug">HTTP-адладчык</string>
+    <string name="vs_netdebug_sub">Запісвае HTTP- і HTTPS-запыты госця і можа адказваць на іх або змяняць іх (меню › HTTP-адладчык). Дадае адладачны цэнтр сертыфікацыі ў сховішча давераных сертыфікатаў госця. Прымяняецца пры наступным поўным запуску.</string>
+    <string name="m_netdebug">HTTP-адладчык</string>
+    <string name="vs_skip_perm_wait">Не чакаць кантролер дазволаў (Android 10–13)</string>
+    <string name="vs_skip_perm_wait_sub">Для прашыўкі x86 на ARM-тэлефоне, дзе праграма кантролера дазволаў адказвае занадта марудна (даўжэй за 60 с) і system_server завяршаецца («Error granting/upgrading runtime permissions»). Змяняе services.jar прашыўкі, каб загрузка не чакала выдачы стандартных дазволаў часу выканання; прадусталяваныя праграмы тады не атрымліваюць гэтыя дазволы падчас загрузкі. dex2oat не дае перакампіляваць змены jar. Пры адключэнні аднаўляецца зыходны jar. Уступае ў сілу пры наступнай поўнай загрузцы.</string>
+    <string name="catalog_download_checking">Праверка спасылкі…</string>
+    <string name="catalog_download_title">Загрузка ROM</string>
+    <string name="catalog_download_failed">Не ўдалося загрузіць: %1$s</string>
 </resources>

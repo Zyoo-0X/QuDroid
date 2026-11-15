@@ -898,8 +898,169 @@ typedef unsigned int EGLBoolean, EGLenum;
 #define EGL_NONE 0x3038
 static __thread EGLint t_err;
 
+
+/* ---- no software renderer behind (x86 / x86-64 firmware): the driver is the whole EGL ----
+ * SwiftShader exists for the phone's own architecture only. A firmware that is translated (an x86-64 Android 10 SDK image: no
+ * libEGL_swiftshader.so, no libGLES_split.so, nothing in /vendor) used to get an EGL with no display: eglGetDisplay answered 0,
+ * libEGL could not initialize the driver and SurfaceFlinger aborted in RenderEngine ("eglQueryStringImplementationANDROID(
+ * EGL_VERSION) failed"). In this mode the display, the configs and the strings are ours, and every context - the
+ * compositor's too - is made on the host (solo() turns policy() off). Window and pbuffer surfaces, images and sync objects of
+ * bridged contexts were ours already. */
+static int solo(void) { if (!SS.up) ss_load(); return !SS.egl || !SS.v2; }
+static char g_solo_dpy[8];
+struct cfg { uint8_t r, g, b, a, depth, stencil; uint8_t visual; };
+/* (visual: the HAL pixel format of the buffers a window of this config takes: 1 RGBA_8888, 2 RGBX_8888, 4 RGB_565) */
+static const struct cfg kCfg[] = {
+    { 8, 8, 8, 8, 24, 8, 1 }, { 8, 8, 8, 8, 16, 0, 1 }, { 8, 8, 8, 8, 0, 0, 1 },
+    { 8, 8, 8, 0, 24, 8, 2 }, { 8, 8, 8, 0, 16, 0, 2 }, { 8, 8, 8, 0, 0, 0, 2 },
+    { 5, 6, 5, 0, 24, 8, 4 }, { 5, 6, 5, 0, 16, 0, 4 }, { 5, 6, 5, 0, 0, 0, 4 },
+};
+#define N_CFG ((int)(sizeof kCfg / sizeof kCfg[0]))
+static const struct cfg *cfg_of(void *c) {
+    uintptr_t i = (uintptr_t)c;
+    return i >= 1 && i <= (uintptr_t)N_CFG ? &kCfg[i - 1] : 0;
+}
+static EGLBoolean solo_cfg_attrib(const struct cfg *c, uintptr_t id, EGLint a, EGLint *v) {
+    int rgb = c->r + c->g + c->b + c->a;
+    switch (a) {
+    case 0x3020: *v = rgb; break;                   /* EGL_BUFFER_SIZE */
+    case 0x3021: *v = c->a; break;                  /* EGL_ALPHA_SIZE */
+    case 0x3022: *v = c->b; break;
+    case 0x3023: *v = c->g; break;
+    case 0x3024: *v = c->r; break;
+    case 0x3025: *v = c->depth; break;
+    case 0x3026: *v = c->stencil; break;
+    case 0x3027: *v = 0x3038; break;                /* EGL_CONFIG_CAVEAT: EGL_NONE */
+    case 0x3028: *v = (EGLint)id; break;            /* EGL_CONFIG_ID */
+    case 0x3029: *v = 0; break;                     /* EGL_LEVEL */
+    case 0x302A: case 0x302C: *v = 4096; break;     /* EGL_MAX_PBUFFER_HEIGHT / WIDTH */
+    case 0x302B: *v = 4096 * 4096; break;           /* EGL_MAX_PBUFFER_PIXELS */
+    case 0x302D: *v = 1; break;                     /* EGL_NATIVE_RENDERABLE */
+    case 0x302E: *v = c->visual; break;             /* EGL_NATIVE_VISUAL_ID */
+    case 0x302F: *v = 0x3038; break;                /* EGL_NATIVE_VISUAL_TYPE */
+    case 0x3031: case 0x3032: *v = 0; break;        /* EGL_SAMPLES / EGL_SAMPLE_BUFFERS */
+    case 0x3033: *v = 0x1 | 0x4; break;             /* EGL_SURFACE_TYPE: PBUFFER | WINDOW */
+    case 0x3034: *v = 0x3038; break;                /* EGL_TRANSPARENT_TYPE: EGL_NONE */
+    case 0x3035: case 0x3036: case 0x3037: *v = 0; break;
+    case 0x3039: *v = 0; break;                     /* EGL_BIND_TO_TEXTURE_RGB */
+    case 0x303A: *v = 0; break;                     /* EGL_BIND_TO_TEXTURE_RGBA */
+    case 0x303B: *v = 0; break;                     /* EGL_MIN_SWAP_INTERVAL */
+    case 0x303C: *v = 1; break;                     /* EGL_MAX_SWAP_INTERVAL */
+    case 0x303D: case 0x303E: *v = 0; break;        /* EGL_LUMINANCE_SIZE / EGL_ALPHA_MASK_SIZE */
+    case 0x303F: *v = 0x308E; break;                /* EGL_COLOR_BUFFER_TYPE: EGL_RGB_BUFFER */
+    case 0x3040: *v = 0x1 | 0x4 | 0x40; break;      /* EGL_RENDERABLE_TYPE: ES | ES2 | ES3 */
+    case 0x3042: *v = 0x1 | 0x4 | 0x40; break;      /* EGL_CONFORMANT */
+    case 0x3142: *v = 1; break;                     /* EGL_RECORDABLE_ANDROID */
+    case 0x3147: *v = c->visual != 4; break;        /* EGL_FRAMEBUFFER_TARGET_ANDROID */
+    default: return 0;
+    }
+    return 1;
+}
+static EGLBoolean solo_eglGetConfigAttrib(EGLDisplay d, EGLConfig c, EGLint a, EGLint *v) {
+    (void)d;
+    const struct cfg *k = cfg_of(c);
+    if (!k || !v) { t_err = k ? 0x300C /* EGL_BAD_PARAMETER */ : 0x3005 /* EGL_BAD_CONFIG */; return 0; }
+    if (!solo_cfg_attrib(k, (uintptr_t)c, a, v)) { t_err = 0x3004; /* EGL_BAD_ATTRIBUTE */ return 0; }
+    return 1;
+}
+static EGLBoolean solo_eglGetConfigs(EGLDisplay d, EGLConfig *out, EGLint size, EGLint *n) {
+    (void)d;
+    if (!n) { t_err = 0x300C; return 0; }
+    if (!out) { *n = N_CFG; return 1; }
+    int k = 0;
+    for (; k < N_CFG && k < size; k++) out[k] = (EGLConfig)(uintptr_t)(k + 1);
+    *n = k;
+    return 1;
+}
+/* eglChooseConfig as the spec has it: the sizes are minimums, the bit masks must be contained, the rest must be equal; a
+ * value of EGL_DONT_CARE (-1) matches everything. Order: more colour bits (of the channels asked for), then smaller buffer,
+ * depth and stencil, then the lower id. */
+static EGLBoolean solo_eglChooseConfig(EGLDisplay d, const EGLint *attribs, EGLConfig *out, EGLint size, EGLint *n) {
+    (void)d;
+    if (!n) { t_err = 0x300C; return 0; }
+    int ok[N_CFG];
+    for (int i = 0; i < N_CFG; i++) ok[i] = 1;
+    int want_r = 0, want_g = 0, want_b = 0, want_a = 0;
+    int renderable_given = 0;
+    for (const EGLint *a = attribs; a && *a != EGL_NONE; a += 2) {
+        EGLint name = a[0], want = a[1];
+        if (name == 0x3024) want_r = want > 0;
+        if (name == 0x3023) want_g = want > 0;
+        if (name == 0x3022) want_b = want > 0;
+        if (name == 0x3021) want_a = want > 0;
+        if (name == 0x3040) renderable_given = 1;
+        if (want == -1) continue;
+        for (int i = 0; i < N_CFG; i++) {
+            EGLint have;
+            if (!solo_cfg_attrib(&kCfg[i], (uintptr_t)(i + 1), name, &have)) { t_err = 0x3004; return 0; }
+            switch (name) {
+            case 0x3020: case 0x3021: case 0x3022: case 0x3023: case 0x3024: case 0x3025: case 0x3026:
+            case 0x3031: case 0x3032: case 0x303D: case 0x303E:
+                { if (have < want) ok[i] = 0; break; }
+            case 0x3033: case 0x3040: case 0x3042:
+                { if ((have & want) != want) ok[i] = 0; break; }
+            case 0x3028: case 0x3029: case 0x302D: case 0x302E: case 0x302F: case 0x3027: case 0x3034:
+            case 0x3039: case 0x303A: case 0x303B: case 0x303C: case 0x303F: case 0x3142: case 0x3147:
+                { if (have != want) ok[i] = 0; break; }
+            default: break;      /* (max pbuffer sizes and the transparent values: not a selection criterion here) */
+            }
+        }
+    }
+    (void)renderable_given;
+    int idx[N_CFG], cnt = 0;
+    for (int i = 0; i < N_CFG; i++) if (ok[i]) idx[cnt++] = i;
+    /* insertion sort: nine entries */
+    for (int i = 1; i < cnt; i++) {
+        int v = idx[i], j = i - 1;
+        for (; j >= 0; j--) {
+            const struct cfg *x = &kCfg[idx[j]], *y = &kCfg[v];
+            int bx = (want_r || (!want_g && !want_b && !want_a) ? x->r : 0) + (want_g || (!want_r && !want_b && !want_a) ? x->g : 0) +
+                     (want_b || (!want_r && !want_g && !want_a) ? x->b : 0) + (want_a ? x->a : 0);
+            int by = (want_r || (!want_g && !want_b && !want_a) ? y->r : 0) + (want_g || (!want_r && !want_b && !want_a) ? y->g : 0) +
+                     (want_b || (!want_r && !want_g && !want_a) ? y->b : 0) + (want_a ? y->a : 0);
+            int before;     /* does y (the one being placed) sort before x? */
+            if (by != bx) before = by > bx;
+            else if (y->r + y->g + y->b + y->a != x->r + x->g + x->b + x->a) before = (y->r + y->g + y->b + y->a) < (x->r + x->g + x->b + x->a);
+            else if (y->depth != x->depth) before = y->depth < x->depth;
+            else if (y->stencil != x->stencil) before = y->stencil < x->stencil;
+            else before = v < idx[j];
+            if (!before) break;
+            idx[j + 1] = idx[j];
+        }
+        idx[j + 1] = v;
+    }
+    if (!out) { *n = cnt; return 1; }
+    int k = 0;
+    for (; k < cnt && k < size; k++) out[k] = (EGLConfig)(uintptr_t)(idx[k] + 1);
+    *n = k;
+    return 1;
+}
+static EGLDisplay solo_eglGetDisplay(void *native) { (void)native; return g_solo_dpy; }
+static EGLBoolean solo_eglInitialize(EGLDisplay d, EGLint *major, EGLint *minor) {
+    if (d != g_solo_dpy) { t_err = 0x3008; /* EGL_BAD_DISPLAY */ return 0; }
+    if (major) *major = 1;
+    if (minor) *minor = 4;
+    return 1;
+}
+static EGLBoolean solo_eglTerminate(EGLDisplay d) { (void)d; return 1; }
+static EGLBoolean solo_eglBindAPI(EGLenum api) { if (api == 0x30A0) return 1; t_err = 0x300C; return 0; }
+static EGLenum solo_eglQueryAPI(void) { return 0x30A0; }
+static EGLBoolean solo_eglWaitNative(EGLint e) { (void)e; return 1; }
+static const char *solo_QueryString(EGLDisplay d, EGLint name) {
+    (void)d;
+    switch (name) {
+    case 0x3053: return "AEmulator";
+    case 0x3054: return "1.4 AEmulator GL bridge";
+    case 0x308D: return "OpenGL_ES";
+    case 0x3055: return "EGL_KHR_image EGL_KHR_image_base EGL_KHR_gl_texture_2D_image EGL_ANDROID_image_native_buffer "
+                        "EGL_KHR_surfaceless_context EGL_ANDROID_recordable EGL_ANDROID_framebuffer_target";
+    }
+    t_err = 0x300C;
+    return 0;
+}
+
 #define FWD(ret, name, params, args) \
-    EXPORT ret name params { static ret (*f) params; if (!f) f = sse(#name); return f ? f args : (ret)0; }
+    EXPORT ret name params { static ret (*f) params; if (!f) f = sse(#name); return f ? f args : solo_##name args; }
 #define SSF(ret, name, params) static ret (*name) params; if (!name) name = sse("egl" #name)
 
 FWD(EGLDisplay, eglGetDisplay, (void *native), (native))
@@ -914,7 +1075,7 @@ EXPORT const char *eglQueryString(EGLDisplay d, EGLint name) {
     static const char *(*f)(EGLDisplay, EGLint);
     static char *ext;
     if (!f) f = sse("eglQueryString");
-    const char *s = f ? f(d, name) : 0;
+    const char *s = f ? f(d, name) : solo_QueryString(d, name);
     if (name != 0x3055 /* EGL_EXTENSIONS */ || !s) return s;
     /* and EGL_KHR_fence_sync (the sync objects below): the 4.4 engine's driver leaves it out, and WebView 44 (6.0)
      * creates a fence anyway, through a function it bound only for that extension - a call to null */
@@ -1132,7 +1293,7 @@ EXPORT EGLContext eglCreateContext(EGLDisplay d, EGLConfig cfg, EGLContext share
     c->version = attr_of(attribs, 0x3098 /* EGL_CONTEXT_CLIENT_VERSION */, 1);
     c->dpy = d; c->cfg = cfg;
     c->g.p_align = c->g.u_align = 4;
-    if (sh ? sh->bridged : policy(c->version)) {
+    if (sh ? sh->bridged : (solo() || policy(c->version))) {
         struct ts *T = ts_get();
         if (T) {
             begin(T, OP_CTX_CREATE, 8, 8); put32(T, sh ? sh->host : 0); put32(T, (uint32_t)c->version);
@@ -1148,6 +1309,7 @@ EXPORT EGLContext eglCreateContext(EGLDisplay d, EGLConfig cfg, EGLContext share
             return c;
         }
         if (sh) { free(c); t_err = EGL_BAD_ALLOC; return 0; }
+        if (solo()) { free(c); t_err = EGL_BAD_ALLOC; LOG("the host gave no context and there is no software renderer"); return 0; }
         LOG("the host gave no context: SwiftShader");
     }
     SSF(EGLContext, CreateContext, (EGLDisplay, EGLConfig, EGLContext, const EGLint *));
@@ -1449,6 +1611,9 @@ static EGLImageKHR own_image(struct ANativeWindowBuffer *b) {
 EXPORT EGLImageKHR eglCreateImageKHR(EGLDisplay d, EGLContext context, EGLenum target, EGLClientBuffer buffer, const EGLint *attribs) {
     struct ectx *c = context;
     SSF(EGLImageKHR, CreateImageKHR, (EGLDisplay, EGLContext, EGLenum, EGLClientBuffer, const EGLint *));
+    /* (no software renderer: a native buffer is only carried to the upload, whatever context - or none - the call names;
+     * RenderEngine makes its images with EGL_NO_CONTEXT) */
+    if (solo() && target == 0x3140 /* EGL_NATIVE_BUFFER_ANDROID */ && buffer && !(c && !c->bridged)) return own_image(buffer);
     if (c && c->bridged) {
         /* a bridged context's texture: the image is the host's, and only bridged contexts can use it */
         struct ts *T = t_ts;
@@ -1583,6 +1748,7 @@ EXPORT EGLSyncKHR eglCreateSyncKHR(EGLDisplay d, EGLenum type, const EGLint *att
         begin(T, OP_PING, 0, 0); rsync(T); get32v(T);
         return BRIDGE_SYNC;
     }
+    if (solo()) return BRIDGE_SYNC;     /* (nothing of ours is drawn anywhere else) */
     SSF(EGLSyncKHR, CreateSyncKHR, (EGLDisplay, EGLenum, const EGLint *));
     return CreateSyncKHR ? CreateSyncKHR(d, type, attribs) : 0;
 }

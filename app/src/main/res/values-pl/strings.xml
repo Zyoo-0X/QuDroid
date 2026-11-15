@@ -529,4 +529,12 @@
     <string name="phantom_open_dev">Otwórz Opcje programisty</string>
     <string name="phantom_ignore">Ignoruj</string>
     <string name="phantom_never">Nie przypominaj więcej</string>
+    <string name="vs_netdebug">Debugger HTTP</string>
+    <string name="vs_netdebug_sub">Rejestruje żądania HTTP i HTTPS gościa i może na nie odpowiadać lub je zmieniać (menu › Debugger HTTP). Umieszcza urząd certyfikacji do debugowania w magazynie zaufania gościa. Obowiązuje od następnego pełnego uruchomienia.</string>
+    <string name="m_netdebug">Debugger HTTP</string>
+    <string name="vs_skip_perm_wait">Pomiń oczekiwanie na kontroler uprawnień (Android 10–13)</string>
+    <string name="vs_skip_perm_wait_sub">Dla firmware x86 na telefonie z ARM, gdzie aplikacja kontrolera uprawnień jest zbyt wolna, by odpowiedzieć w 60 s, i system_server zostaje zabity („Error granting/upgrading runtime permissions”). Modyfikuje plik services.jar firmware, aby rozruch nie czekał na domyślne uprawnienia czasu wykonania; preinstalowane aplikacje nie dostają wtedy tych uprawnień przy rozruchu. dex2oat nie może ponownie skompilować zmodyfikowanego pliku jar. Wyłączenie przywraca oryginalny plik jar. Zadziała przy następnym pełnym rozruchu.</string>
+    <string name="catalog_download_checking">Sprawdzanie linku…</string>
+    <string name="catalog_download_title">Pobieranie ROM-u</string>
+    <string name="catalog_download_failed">Pobieranie nie powiodło się: %1$s</string>
 </resources>

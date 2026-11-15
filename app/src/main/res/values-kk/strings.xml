@@ -526,4 +526,12 @@
     <string name="phantom_open_dev">Әзірлеуші опцияларын ашу</string>
     <string name="phantom_ignore">Елемеу</string>
     <string name="phantom_never">Енді еске салмау</string>
+    <string name="vs_netdebug">HTTP жөндегіші</string>
+    <string name="vs_netdebug_sub">Қонақтың HTTP және HTTPS сұрауларын тіркейді және оларға жауап бере немесе өзгерте алады (мәзір › HTTP жөндегіші). Қонақтың сенімді сақтағышына жөндеуге арналған CA қосады. Келесі толық іске қосуда қолданылады.</string>
+    <string name="m_netdebug">HTTP жөндегіші</string>
+    <string name="vs_skip_perm_wait">Рұқсат контроллерін күтуді өткізіп жіберу (Android 10–13)</string>
+    <string name="vs_skip_perm_wait_sub">ARM телефонындағы x86 микробағдарламасына арналған: рұқсат контроллері қолданбасы 60 с ішінде жауап беруге тым баяу болып, system_server тоқтатылғанда («Error granting/upgrading runtime permissions»). Микробағдарламаның services.jar файлын түзетеді, сонда жүктеу әдепкі орындау уақытындағы рұқсаттардың берілуін күтпейді; алдын ала орнатылған қолданбалар бұл рұқсаттарды жүктеу кезінде алмайды. dex2oat түзетілген jar файлын қайта құрастыра алмайды. Өшіру түпнұсқа jar файлын қалпына келтіреді. Келесі толық жүктеуде күшіне енеді.</string>
+    <string name="catalog_download_checking">Сілтеме тексерілуде…</string>
+    <string name="catalog_download_title">ROM жүктелуде</string>
+    <string name="catalog_download_failed">Жүктеу сәтсіз аяқталды: %1$s</string>
 </resources>

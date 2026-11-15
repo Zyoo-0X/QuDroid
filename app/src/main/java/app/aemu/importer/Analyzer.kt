@@ -159,7 +159,8 @@ class Analyzer(private val ctx: Context, private val paths: VmPaths, private val
             settings = settings,
             createdAt = System.currentTimeMillis(),
             sourceName = sourceName,
-            runtime = if (api >= 21) "art" else "dalvik",
+            // (a pre-1.0 build says "jam" when its runtime starts JamVM, see LegacyFirmware.runtimeVm)
+            runtime = if (legacy) LegacyFirmware.runtimeVm(root) ?: "dalvik" else if (api >= 21) "art" else "dalvik",
             warnings = warnings,
             profileVersion = VERSION,
             buildId = (all["ro.build.id"] ?: "").trim(),

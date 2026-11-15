@@ -25,6 +25,14 @@ class DnsProxy(private val paths: VmPaths, private val api: Int, private val log
     private var failures = 0
     @Volatile var queries = 0L
         private set
+    /** the HTTP debugger, when the VM uses it: names are answered (and logged, and possibly overridden) by it */
+    @Volatile var debugger: app.aemu.netdebug.NetDebugger? = null
+
+    private fun lookup(host: String): List<InetAddress> {
+        val d = debugger
+        if (d == null || host.all { it.isDigit() || it == '.' || it == ':' }) return InetAddress.getAllByName(host).toList()
+        return d.answer(host) ?: throw java.net.UnknownHostException(host)
+    }
 
     @Synchronized
     fun ensure() {
@@ -105,7 +113,7 @@ class DnsProxy(private val paths: VmPaths, private val api: Int, private val log
         val addrs: List<InetAddress> = when {
             host == null -> listOf(InetAddress.getByAddress(if (flags and AI_PASSIVE != 0) byteArrayOf(0, 0, 0, 0) else byteArrayOf(127, 0, 0, 1)))
             else -> {
-                val all = InetAddress.getAllByName(host).toList()
+                val all = lookup(host)
                 val v4 = all.filterIsInstance<Inet4Address>()
                 when (family) {
                     AF_INET -> v4
@@ -162,7 +170,7 @@ class DnsProxy(private val paths: VmPaths, private val api: Int, private val log
         val name = args.firstOrNull { !it.all { ch -> ch.isDigit() } } ?: args.firstOrNull() ?: return fail(o)
         val af = args.filter { it != name }.mapNotNull { it.toIntOrNull() }.firstOrNull { it == AF_INET || it == AF_INET6 } ?: AF_INET
         if (af != AF_INET) return fail(o)
-        val v4 = InetAddress.getAllByName(name).filterIsInstance<Inet4Address>()
+        val v4 = lookup(name).filterIsInstance<Inet4Address>()
         if (v4.isEmpty()) return fail(o)
         ok(o)
         lenData(o, (name + "\u0000").toByteArray())

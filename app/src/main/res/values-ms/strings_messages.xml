@@ -232,4 +232,7 @@
     <string name="imp_choice_text">Pakej ini mempunyai lebih daripada satu %1$s (%2$d daripada %3$d). Pilih yang hendak diimport.</string>
     <string name="imp_choice_ok">Import</string>
     <string name="imp_choice_cancel">Batal import</string>
+    <string name="ota_squash_files_modified">%1$d fail dalam /system telah diubah oleh aplikasi atau oleh anda dan tidak boleh dibina semula, cth. %2$s. Imej sistem SquashFS hanya boleh dibina semula daripada fail yang tidak diubah. Tiada apa-apa yang diubah.</string>
+    <string name="imp_unreadable_mbr">%1$s: jadual partition MBR tidak boleh dibaca</string>
+    <string name="imp_no_system_partition_in_mbr">%1$s: tiada partition sistem dalam MBR</string>
 </resources>

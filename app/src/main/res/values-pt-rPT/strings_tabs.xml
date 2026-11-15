@@ -8,4 +8,12 @@
     <string name="tab_minimize">Minimizar</string>
     <string name="tab_shutdown">Encerrar</string>
     <string name="vm_slots_full">Todas as %1$d ranhuras de máquina estão em uso. Encerre primeiro uma.</string>
+    <string name="tab_group_title">2 separadores</string>
+    <string name="tab_split_failed">Essa máquina já não pode ser adicionada a este separador.</string>
+    <string name="tab_drag_label">Arraste para o ecrã para dividir</string>
+    <string name="tab_split_title">Dividir 2 separadores?</string>
+    <string name="tab_split_text">Cada máquina volta a ter um separador próprio. Ambas continuam em execução.</string>
+    <string name="tab_split_action">Dividir</string>
+    <string name="tab_bar_hide">Ocultar barra de separadores</string>
+    <string name="tab_bar_show">Mostrar barra de separadores</string>
 </resources>

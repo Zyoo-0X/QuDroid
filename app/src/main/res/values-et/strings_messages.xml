@@ -232,4 +232,7 @@
     <string name="imp_choice_text">Selles paketis on rohkem kui üks üksus (%1$s): %2$d / %3$d. Vali see, mida importida.</string>
     <string name="imp_choice_ok">Impordi</string>
     <string name="imp_choice_cancel">Tühista import</string>
+    <string name="ota_squash_files_modified">Rakendus või sina oled muutnud %1$d faili kaustas /system ning neid ei saa uuesti ehitada, nt %2$s. SquashFS-i süsteemikujutist saab uuesti ehitada ainult muutmata failidest. Midagi ei muudetud.</string>
+    <string name="imp_unreadable_mbr">%1$s: loetamatu MBR-i partitsioonitabel</string>
+    <string name="imp_no_system_partition_in_mbr">%1$s: MBR-is pole süsteemipartitsiooni</string>
 </resources>

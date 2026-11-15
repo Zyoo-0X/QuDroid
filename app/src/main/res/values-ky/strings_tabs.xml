@@ -8,4 +8,12 @@
     <string name="tab_minimize">Кичирейтүү</string>
     <string name="tab_shutdown">Өчүрүү</string>
     <string name="vm_slots_full">Машинанын бардык %1$d уячасы бош эмес. Адегенде бирөөнү өчүрүңүз.</string>
+    <string name="tab_group_title">2 өтмөк</string>
+    <string name="tab_split_failed">Ал машинаны бул өтмөккө мындан ары кошууга болбойт.</string>
+    <string name="tab_drag_label">Бөлүү үчүн экранга сүйрөңүз</string>
+    <string name="tab_split_title">2 өтмөк бөлүнсүнбү?</string>
+    <string name="tab_split_text">Ар бир машина өз өтмөгүнө кайтат. Экөө тең иштей берет.</string>
+    <string name="tab_split_action">Бөлүү</string>
+    <string name="tab_bar_hide">Өтмөктөр тилкесин жашыруу</string>
+    <string name="tab_bar_show">Өтмөктөр тилкесин көрсөтүү</string>
 </resources>

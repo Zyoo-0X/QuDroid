@@ -140,3 +140,9 @@ publishing notices or hashes does not remedy missing required source.
   their own over the whole screen (`ui/TabDialogActivity.kt`, `Theme.AEmulator.TabDialog`) instead of a dialog of one half,
   which the other half covered. The close button of a tab of two machines now asks to split it back into two tabs (nothing is
   closed), and the dialog goes away by itself when its tab changes.
+
+## 2026-11-15: HTTP debugger
+
+Added the HTTP debugger (`app/src/main/java/app/aemu/netdebug/`, `native/common/aemu_nethook.h`, `docs/http-debugger.md`) and
+its hooks in `GuestVm`, `GuestRunner`, `DnsProxy`, `GuestImage`, the VM menu and settings, and the native engine's
+runner (`native/guest64/*/run64.c`).

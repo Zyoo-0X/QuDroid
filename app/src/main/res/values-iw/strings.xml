@@ -527,4 +527,12 @@
     <string name="phantom_open_dev">פתיחת אפשרויות למפתחים</string>
     <string name="phantom_ignore">התעלמות</string>
     <string name="phantom_never">אל תזכיר שוב</string>
+    <string name="vs_netdebug">מנפה באגים של HTTP</string>
+    <string name="vs_netdebug_sub">מתעד את בקשות ה-HTTP וה-HTTPS של האורח ויכול להשיב להן או לשנות אותן (תפריט › מנפה באגים של HTTP). מוסיף רשות אישורים לניפוי באגים לחנות האמון של האורח. חל מההפעלה המלאה הבאה.</string>
+    <string name="m_netdebug">מנפה באגים של HTTP</string>
+    <string name="vs_skip_perm_wait">דילוג על ההמתנה לבקר ההרשאות (Android 10-13)</string>
+    <string name="vs_skip_perm_wait_sub">עבור קושחת x86 בטלפון ARM, כשאפליקציית בקר ההרשאות איטית מכדי להשיב תוך 60 שניות ו-system_server נסגר (\"Error granting/upgrading runtime permissions\"). מתקן את services.jar של הקושחה כך שהאתחול לא ימתין למתן הרשאות זמן הריצה כברירת מחדל; אפליקציות מותקנות מראש לא יקבלו אז את ההרשאות האלה באתחול. מונעים מ-dex2oat לקמפל מחדש את ה-jar המתוקן. כיבוי מחזיר את ה-jar המקורי. נכנס לתוקף באתחול המלא הבא.</string>
+    <string name="catalog_download_checking">בודק את הקישור…</string>
+    <string name="catalog_download_title">מוריד ROM</string>
+    <string name="catalog_download_failed">ההורדה נכשלה: %1$s</string>
 </resources>

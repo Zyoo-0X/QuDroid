@@ -110,6 +110,29 @@ Build: `native/guestshim/build-x86.sh` (needs `gcc -m32`). Test: `native/guestsh
 An existing x86 image picks the file up on the next start (the installer compares size and CRC). `libaemuxattr.so` is not needed
 on x86: its job (installd's xattr calls) is done here, in the library every guest process preloads.
 
+## Android 10 x86-64: mediaextractor / media.swcodec abort in Scudo, system_server dies (2026-11-13)
+
+Log of an `Android SDK built for x86_64` (API 29) image on a 39-bit phone (OnePlus Pad 3, Android 17): `mediaextractor` and
+`media.swcodec` abort on every start,
+
+```
+==N==ERROR: Scudo failed to allocate 0x3000 (12288) bytes of memory at address 0x3fffffff000 (error code: 12)
+Scudo ERROR: CHECK failed at .../sanitizer_common.cc:54 ((0 && "unable to mmap")) != (0) (0, 0)
+```
+
+(guest backtrace: `MmapFixedImpl <- SizeClassAllocator64::Init <- initOnce <- scudoAllocate <- libc_scudo.so malloc+26`). The two programs
+link `libc_scudo.so`, which puts Scudo's hardened allocator (`libscudo_wrapper.so`) in front of bionic's malloc. On x86-64 that Scudo
+reserves a 4 TiB primary region (only AArch64 gets the 256 GiB one); the phone's address space is 512 GiB, the reservation fails
+unnoticed and the next fixed mapping, at the end of the region, fails with ENOMEM. With no `media.extractor` the framework's media
+users wait (`Waiting for service 'media.extractor'`, `MediaExtractorFactory: extractor service not running`, SoundPool in
+AudioService), the permission controller times out and system_server is killed:
+`FATAL EXCEPTION IN SYSTEM PROCESS: android.fg: Error granting/upgrading runtime permissions`, then `Exit zygote because system server has terminated`.
+
+`TreeFixer.scudoStub` (`core/ScudoStub.kt`) replaces every 64-bit x86 `libc_scudo.so` of the tree (system/vendor `lib64`, the `lib64` of each
+APEX module: swcodec has its own copy) with an empty library of the same soname, `assets/engines/common-x86_64/libc_scudo_stub.so`
+(`native/x86_64/build-scudo-stub.sh`). Nothing in it defines malloc, so the programs keep bionic's allocator (jemalloc on 10), as every other guest
+process does. The firmware's file is kept in `system/.aemu-parked/`. x86-32 copies (small 32-bit region) and arm64 ones are left alone.
+
 ## Stock translators for the native engine
 
 `libqemu_i386.so` and `libqemu_x86_64.so` are now **unpatched QEMU 8.2.7** (`i386-linux-user` / `x86_64-linux-user`), built with Zig as static aarch64
@@ -118,7 +141,7 @@ executables, see `tools/qemu-zig/README.md`. They have no SENSES patches (no `DH
 
 ## x86-64 on the native engine: engine files built with zig (2026-11-04)
 
-`assets/engines/n64-x86_64` holds the engine's own x86-64 builds (sources and scripts in `native/x86_64`). The arm/arm64
+`assets/engines/common-x86_64` (release independent) and `assets/engines/n64-<api>/x86_64` (one release; today `n64-30/x86_64`, the audio HAL stack) hold the engine's own x86-64 builds (sources and scripts in `native/x86_64`). The arm/arm64
 files of the other layers are still not installed for a translated firmware; these are. Today: `hwcomposer.default.so`,
 the HWC2 module that stops `composer@2.4-service` exiting with `failed to get hwcomposer2 function 54`. It is skipped when
 the firmware has a hwcomposer HAL of its own. The graphics allocator (minigbm needs a DRM node) and an OpenGL ES driver are
@@ -145,3 +168,57 @@ Boot log of an Android 10 x86-64 image (`Android SDK built for x86_64`) with the
 | `vendor.camera-provider-2-4` | `Could not get passthrough implementation for android.hardware.camera.provider@2.4::ICameraProvider/legacy/0`, exit 1; cameraserver "Waited one second for ... ICameraProvider/legacy/0" | the goldfish camera module (`camera.ranchu.so`) is set aside and needs the emulator host anyway | same rule: provider set aside, declaration dropped, cameraserver sees no provider |
 
 `diag.txt` lists the HAL files set aside (`HAL files set aside`), so the next log shows what is still parked.
+
+## x86 / x86-64 firmware: process_vm_readv (2026-11-13)
+
+Android on x86 / x86-64 needs `process_vm_readv` to boot (syscall 310 on x86-64, 347 on i386). User-mode QEMU has no case for it, so the
+guest got `-ENOSYS`. `libqemu_x86_64.so` and `libqemu_i386.so` (the translators of the native engine) now forward it to the host
+(aarch64 syscall 270). The ARM translators, `libqemu_kk_i386.so` and with it the Android 1-7 x86 engine are not touched; the ARM
+guests do not make the call. `process_vm_writev` (311 / 348) stays unimplemented.
+
+`tools/patch_x86_translator_process_vm_readv.py` (run from the checkout root, idempotent, addresses are checked first) points the
+jump-table entry of the syscall in `do_syscall1` at a stub that makes the host call and leaves through the function's own epilogue:
+
+| Translator | Stub | Notes |
+| --- | --- | --- |
+| x86-64 | 9 instructions: `x2..x7` (guest arguments) to `x0..x5`, `x8 = 270`, `svc #0` | the guest `struct iovec` is the host's own; guest and host addresses are the same under the runner's `-B 0`; the kernel does the checks, the result is already `-errno` |
+| i386 | ~70 instructions | `iovec` is `{u32, u32}` here, so both vectors are copied with a `process_vm_readv` on the translator's own process (an unreadable vector gives `-EFAULT`, not a SIGSEGV in the translator) and widened in place to the host layout; flags != 0 and counts above 1024 give `-EINVAL` like the kernel; at most 32 KiB of stack, released by the epilogue |
+
+There was no room for the stub: the text segment is packed against the data segment in the file. The patch inserts 0x10000 bytes
+(keeps the 64 KiB offset/vaddr congruence of the data segments) behind the text, puts the stub there and makes the text segment (and
+the `.text` section) that much longer. No virtual address moves, so the other `tools/patch_*translator*.py` scripts still match, in any order.
+
+`tools/test_x86_translator_process_vm_readv.py <dir with the unpatched .so files>` (needs `pip install unicorn`) maps the patched files like the kernel,
+runs `do_syscall1` for real from its first instruction, answers the host calls with a model of the kernel's `process_vm_readv` and checks
+arguments, results, errors (`ESRCH`, `EINVAL`, `EFAULT`), the i386 widening, balanced sp / callee-saved registers and that the neighbouring
+syscalls and `process_vm_writev` behave as before. The pointer arguments rely on `-B 0` like the ioctl passthrough does.
+
+## x86-64 Android 10/11 system-only image: GL bridge, keystore and audioserver (2026-11-14)
+
+Log of an `Android SDK built for x86_64` (API 30) image whose `/vendor` has no HAL at all (only the engine's `libGLES_aemu.so`, hwcomposer and sensors):
+
+| Service | Log | Cause | Fix |
+| --- | --- | --- | --- |
+| `surfaceflinger` | `SwiftShader is not there`, `eglQueryStringImplementationANDROID(EGL_VERSION) failed`, abort | the GPU bridge took EGL displays and configs from SwiftShader, which exists for the phone's architecture only | `native/glbridge/guest.c` "solo" mode (no SwiftShader found): the bridge has its own display, nine configs, EGL strings, images and fences, and every context goes to the host GPU. Host test: `native/glbridge/tests/run-solo.sh` |
+| 32-bit programs of the same image | no bridge for them | only `system/lib64/egl` had one | `assets/engines/common-x86_64/system#lib#egl#libGLES_aemu.so` (i386, `native/glbridge/build32-x86.sh`; TreeFixer moves it to `vendor/lib/egl`); x86-64 build: `build64-x86_64.sh`; both `build-x86-zig.sh` |
+| `keystore` | `Check failed: kmDevices[TRUSTED_ENVIRONMENT] Error no viable keymaster device found`, exit 134, 12 restarts | no keymaster HAL | `GuestVm`: no keymaster service in the plan, so the daemon is not started; the `aemu-keystore` stand-in serves `android.security.keystore` (no real keys) |
+| `system_server` / `zygote` | `Cannot find entry android.hardware.health@2.0::IHealth/default`, `Failed to start service com.android.server.BatteryService`, `No IHealth service instance among [default, backup] is available`, zygote `exited due to signal 9` | no health HAL, BatteryService.onStart throws | `native/x86_64/health`: a stand-in IHealth@2.0 service that registers `default` and serves `/sys/class/power_supply` (the nodes HostBatteryBridge writes), built with zig from AOSP android11-release (`audio/fetch-aosp.sh`, `health/build-health.sh`); `TreeFixer.x86HealthWanted` installs it for API 29/30 when the tree has no health HAL of its own |
+| `audioserver` | `Cannot find entry android.hardware.audio@{6,5,4,2}.0::IDevicesFactory/default`, SIGSEGV in `AudioFlinger::AudioFlinger` | no audio HAL, libaudiohal returns null | `native/x86_64/audio`: audio 2.0 core + effect HAL impls, service and the engine's `/dev/eac` module built with zig from AOSP android11-release (`fetch-aosp.sh`, `build-audio.sh`); `TreeFixer.x86AudioWanted` installs them for API 29/30 when the tree has no audio HAL of its own |
+
+The vendor namespace does not see `/system/lib64` libraries that are not VNDK: `android.hardware.audio.common-util.so` and `android.hardware.audio.common@2.0-util.so` are shipped in `vendor/lib64`, `libaudiofoundation` (AudioContainers) and `libeffectsconfig` + tinyxml2 are linked statically. None of this has run in a guest yet.
+
+
+## System-only Android 11 x86-64 image: manifest, composer, gralloc (2026-11-14)
+
+Log of the Android 11 SDK image on the native engine: `Cannot read /vendor/manifest.xml` (no device manifest, so every HAL registration
+was refused: audio HAL abort 134, audioserver 139), `failed to get hwcomposer service` (SurfaceFlinger abort 134, fb0 empty), keystore
+abort 134. What changed:
+
+* `TreeFixer.ensureDeviceManifest()` writes an empty device manifest (target-level by API) when the tree has none.
+* `engines/n64-30/x86_64` also holds the composer@2.1 stack (`native/x86_64/composer`) and the Android 11 build of allocator/mapper 2.0
+  (installed from API 30, `x86Gralloc2Wanted`; API 31+ keeps the 12L build of `common-x86_64`). The composer stack is installed for API 29/30
+  when the firmware has no composer HAL (`x86ComposerWanted`).
+* The keystore daemon is no longer started for such a firmware: `wait_for_keymaster` (a program of every tree) was taken for a keymaster HAL,
+  so the check in `GuestVm` never fired; the `aemu-keystore` stand-in serves `android.security.keystore`.
+
+Not run in a guest: the binaries are compiled, linked and checked (DT_NEEDED, imports, exported `HIDL_FETCH_IComposer`) only.

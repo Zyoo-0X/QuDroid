@@ -20,6 +20,16 @@ class VmUiPolicyTest {
         listOf("PREPARING", "BOOTING", "RUNNING").forEach { assertTrue(VmUiPolicy.active(it)) }
         listOf("STOPPED", "STOPPING", "FAILED", "unknown").forEach { assertFalse(VmUiPolicy.active(it)) }
     }
+    @Test fun shellFollowsAdbdNotBootCompletion() {
+        // adbd up: offered while booting (a hung boot is when it is wanted) and when running
+        assertTrue(VmUiPolicy.adbAvailable("BOOTING", true, false))
+        assertTrue(VmUiPolicy.adbAvailable("RUNNING", true, false))
+        // adbd not initialized yet: not offered, whatever the state
+        listOf("PREPARING", "BOOTING", "RUNNING").forEach { assertFalse(VmUiPolicy.adbAvailable(it, false, false)) }
+        // a machine that is not on its way up has no shell, and neither has recovery
+        listOf("STOPPED", "STOPPING", "FAILED", "PREPARING").forEach { assertFalse(VmUiPolicy.adbAvailable(it, true, false)) }
+        assertFalse(VmUiPolicy.adbAvailable("RUNNING", true, true))
+    }
     // area 400x800, button 100x100: it can travel up to 300 left and 700 down from its top-right resting spot
     @Test fun menuButtonInsideTheBorderIsLeftAlone() {
         assertEquals(0f to 0f, VmUiPolicy.clampMenuOffset(0f, 0f, 400, 800, 100, 100))

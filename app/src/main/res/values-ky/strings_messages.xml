@@ -232,4 +232,7 @@
     <string name="update_err_wrong_variant">Жаңыртуу APKсы бул колдонмонун вариантына дал келбейт</string>
     <string name="update_err_wrong_package">Жүктөлүп алынган APKнын колдонмо пакети туура эмес</string>
     <string name="catalog_err_too_many_lines">Каталог 10000 саптан ашат</string>
+    <string name="ota_squash_files_modified">/system ичиндеги %1$d файл колдонмо же сиз тарабынан өзгөртүлгөн, аларды кайра куруу мүмкүн эмес, мисалы %2$s. SquashFS тутум элесин өзгөртүлбөгөн файлдардан гана кайра куруга болот. Эч нерсе өзгөргөн жок.</string>
+    <string name="imp_unreadable_mbr">%1$s: MBR бөлүм таблицасын окуу мүмкүн эмес</string>
+    <string name="imp_no_system_partition_in_mbr">%1$s: MBR ичинде тутум бөлүмү жок</string>
 </resources>

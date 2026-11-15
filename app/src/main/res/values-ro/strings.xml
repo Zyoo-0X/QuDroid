@@ -528,4 +528,12 @@
     <string name="phantom_open_dev">Deschide Opțiunile pentru dezvoltatori</string>
     <string name="phantom_ignore">Ignoră</string>
     <string name="phantom_never">Nu mai reaminti</string>
+    <string name="vs_netdebug">Depanator HTTP</string>
+    <string name="vs_netdebug_sub">Înregistrează cererile HTTP și HTTPS ale oaspetelui și le poate răspunde sau modifica (meniu › Depanator HTTP). Adaugă o autoritate de certificare de depanare în depozitul de încredere al oaspetelui. Se aplică la următoarea pornire completă.</string>
+    <string name="m_netdebug">Depanator HTTP</string>
+    <string name="vs_skip_perm_wait">Omite așteptarea controlerului de permisiuni (Android 10-13)</string>
+    <string name="vs_skip_perm_wait_sub">Pentru firmware x86 pe un telefon ARM, unde aplicația controlerului de permisiuni este prea lentă ca să răspundă în 60 s și system_server este oprit („Error granting/upgrading runtime permissions”). Modifică services.jar al firmware-ului astfel încât pornirea să nu aștepte permisiunile implicite de execuție; aplicațiile preinstalate nu primesc apoi aceste permisiuni la pornire. dex2oat este împiedicat să recompileze jar-ul modificat. Dezactivarea restaurează jar-ul original. Se aplică la următoarea pornire completă.</string>
+    <string name="catalog_download_checking">Se verifică linkul…</string>
+    <string name="catalog_download_title">Se descarcă ROM-ul</string>
+    <string name="catalog_download_failed">Descărcare eșuată: %1$s</string>
 </resources>

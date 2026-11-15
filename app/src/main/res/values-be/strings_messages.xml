@@ -232,4 +232,7 @@
     <string name="imp_choice_text">У гэтым пакеце некалькі варыянтаў %1$s (%2$d з %3$d). Выберыце той, які трэба імпартаваць.</string>
     <string name="imp_choice_ok">Імпартаваць</string>
     <string name="imp_choice_cancel">Скасаваць імпарт</string>
+    <string name="ota_squash_files_modified">Файлы ў /system (%1$d) былі зменены праграмай або вамі і не могуць быць перабудаваныя, напрыклад %2$s. Вобраз сістэмы SquashFS можна перабудаваць толькі з нязмененых файлаў. Нічога не зменена.</string>
+    <string name="imp_unreadable_mbr">%1$s: немагчыма прачытаць табліцу раздзелаў MBR</string>
+    <string name="imp_no_system_partition_in_mbr">%1$s: у MBR няма сістэмнага раздзела</string>
 </resources>

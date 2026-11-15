@@ -232,4 +232,7 @@
     <string name="imp_choice_text">Tämä paketti sisältää useamman kuin yhden kohteen (%1$s): %2$d / %3$d. Valitse tuotava.</string>
     <string name="imp_choice_ok">Tuo</string>
     <string name="imp_choice_cancel">Peruuta tuonti</string>
+    <string name="ota_squash_files_modified">%1$d tiedostoa kansiossa /system on muuttunut sovelluksen tai sinun toimestasi, eikä niitä voi rakentaa uudelleen, esim. %2$s. SquashFS-järjestelmäkuva voidaan rakentaa uudelleen vain muuttumattomista tiedostoista. Mitään ei muutettu.</string>
+    <string name="imp_unreadable_mbr">%1$s: MBR-osiotaulua ei voi lukea</string>
+    <string name="imp_no_system_partition_in_mbr">%1$s: MBR:ssä ei ole järjestelmäosiota</string>
 </resources>

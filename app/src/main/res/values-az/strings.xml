@@ -524,4 +524,12 @@
     <string name="phantom_open_dev">Developer Options-u aç</string>
     <string name="phantom_ignore">Nəzərə alma</string>
     <string name="phantom_never">Bir daha xatırlatma</string>
+    <string name="vs_netdebug">HTTP sazlayıcısı</string>
+    <string name="vs_netdebug_sub">Qonağın HTTP və HTTPS sorğularını qeyd edir və onlara cavab verə və ya onları dəyişə bilər (menyu › HTTP sazlayıcısı). Qonağın etibar anbarına sazlama CA-sı əlavə edir. Növbəti tam başladılmada tətbiq olunur.</string>
+    <string name="m_netdebug">HTTP sazlayıcısı</string>
+    <string name="vs_skip_perm_wait">İcazə nəzarətçisini gözləməyi ötür (Android 10-13)</string>
+    <string name="vs_skip_perm_wait_sub">ARM telefonda x86 proqram təminatı üçün: icazə nəzarətçisi tətbiqi 60 s ərzində cavab verə bilməyəcək qədər yavaş olduqda və system_server dayandırıldıqda (“Error granting/upgrading runtime permissions”). Proqram təminatının services.jar faylını yamaqlayır ki, yükləmə defolt icra vaxtı icazələrinin verilməsini gözləməsin; əvvəlcədən quraşdırılmış tətbiqlər bu zaman həmin icazələri yükləmə zamanı almır. dex2oat yamaqlanmış jar-ı yenidən tərtib etməkdən saxlanılır. Söndürmək orijinal jar-ı bərpa edir. Növbəti tam yükləmədə qüvvəyə minir.</string>
+    <string name="catalog_download_checking">Keçid yoxlanılır…</string>
+    <string name="catalog_download_title">ROM endirilir</string>
+    <string name="catalog_download_failed">Endirmə uğursuz oldu: %1$s</string>
 </resources>

@@ -372,12 +372,23 @@ __attribute__((constructor)) static void hold_std_fds(void) {
 /* ...and stay held: a native handle whose fd slot reads 0 is closed through native_handle_close, the next buffer then
  * took 0 again in 7.1's SurfaceFlinger. A closed 0..2 is reopened on /dev/null at once. */
 #include "bcmgpu.h"   /* /dev/gememalloc, /dev/v3d, /dev/cache-ops of the Broadcom firmware */
+#include "adss.h"     /* /dev/adss of the Windows 10 Mobile Android image (AdssBus: zygote opens it before system_server) */
 
 EXPORT int close(int fd) {
     long r = sys3(SYS_close, fd, 0, 0);
     if (r >= 0) bcmgpu_closed(fd);
+    if (r >= 0) adss_closed(fd);
     if (r >= 0 && fd >= 0 && fd < 3) sys3(SYS_open, (long)"/dev/null", 2 /* O_RDWR */, 0);
     return r >= 0 ? (int)r : (int)fail(r);
+}
+
+/* Added for AEmulator Plus (2026-11-15): the ADSS driver's "read 4 bytes, EOVERFLOW + size" probe (see adss.h). Everything but that
+ * probe goes straight to the kernel. */
+EXPORT long read(int fd, void *buf, unsigned long n) {
+    long a = adss_read(fd, buf, n);
+    if (a != -4096) return fail(a);
+    long r = sys3(SYS_read, fd, (long)buf, (long)n);
+    return r < 0 ? (long)fail(r) : r;
 }
 
 static char *g_argv0;
@@ -604,6 +615,8 @@ EXPORT int open(const char *path, int flags, ...) {
     if (tb != -4096) return tb < 0 ? fail(tb) : (int)tb;
     tb = bcmgpu_open(path, flags);
     if (tb != -4096) return tb < 0 ? fail(tb) : (int)tb;
+    tb = adss_open(path, flags);
+    if (tb != -4096) return tb < 0 ? fail(tb) : (int)tb;
     if (path && (flags & 3) && path[0] == '/' && path[1] == 'p') {
         int fd = oom_open(path);
         if (fd >= 0) return fd;
@@ -665,6 +678,7 @@ EXPORT int openat(int dirfd, const char *path, int flags, ...) {
     long r = trackball_open(path, flags);
     if (r == -4096) r = vinput_open(path, flags);
     if (r == -4096) r = bcmgpu_open(path, flags);
+    if (r == -4096) r = adss_open(path, flags);
     if (r == -4096) r = sys4(322 /* openat */, dirfd, (long)path, flags | 0400000, mode);
     return r < 0 ? fail(r) : (int)r;
 }
@@ -1072,6 +1086,7 @@ static long bwr_ordered(int fd, struct bwr *b, int tid) {
 
 EXPORT int ioctl(int fd, int req, void *arg) {
     { long bg = bcmgpu_ioctl(fd, (unsigned)req, arg); if (bg != -4096) return bg < 0 ? (int)fail(bg) : (int)bg; }
+    { long ad = adss_ioctl(fd, (unsigned)req, arg); if (ad != -4096) return ad < 0 ? (int)fail(ad) : (int)ad; }
     if (((unsigned)req >> 8 & 255) == 'E' && trackball_fd(fd)) return trackball_ioctl((unsigned)req, arg);
     if (((unsigned)req >> 8 & 255) == 'E') { int vk = vinput_fd(fd); if (vk) return vinput_ioctl(vk, (unsigned)req, arg); }
     if ((unsigned)req != BINDER_WRITE_READ_ || !arg) {

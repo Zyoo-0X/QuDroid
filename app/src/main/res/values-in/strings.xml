@@ -523,4 +523,12 @@
     <string name="phantom_open_dev">Buka Opsi Developer</string>
     <string name="phantom_ignore">Abaikan</string>
     <string name="phantom_never">Jangan ingatkan lagi</string>
+    <string name="vs_netdebug">Debugger HTTP</string>
+    <string name="vs_netdebug_sub">Mencatat permintaan HTTP dan HTTPS tamu serta dapat menjawab atau mengubahnya (menu › Debugger HTTP). Menaruh CA debugging ke penyimpanan tepercaya tamu. Berlaku pada mulai penuh berikutnya.</string>
+    <string name="m_netdebug">Debugger HTTP</string>
+    <string name="vs_skip_perm_wait">Lewati penantian pengontrol izin (Android 10-13)</string>
+    <string name="vs_skip_perm_wait_sub">Untuk firmware x86 di ponsel ARM, saat aplikasi pengontrol izin terlalu lambat menjawab dalam 60 d dan system_server dimatikan (\"Error granting/upgrading runtime permissions\"). Mem-patch services.jar firmware agar booting tidak menunggu pemberian izin runtime default; aplikasi bawaan lalu tidak mendapat izin tersebut saat boot. dex2oat dicegah mengompilasi ulang jar yang sudah di-patch. Menonaktifkannya memulihkan jar asli. Berlaku pada boot penuh berikutnya.</string>
+    <string name="catalog_download_checking">Memeriksa tautan…</string>
+    <string name="catalog_download_title">Mengunduh ROM</string>
+    <string name="catalog_download_failed">Unduhan gagal: %1$s</string>
 </resources>

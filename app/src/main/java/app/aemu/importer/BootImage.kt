@@ -1,6 +1,7 @@
 /* Modified for AEmulator Super Plus, 2026-10-11: Sony ELF boot images. GPL-3.0; see LICENSE and NOTICE.md. */
 package app.aemu.importer
 
+import app.aemu.core.LegacyFirmware
 import app.aemu.core.VmSettings
 import org.tukaani.xz.LZMAInputStream
 import org.tukaani.xz.XZInputStream
@@ -136,9 +137,45 @@ object BootImage {
                     val d = gunzipLenient(img.copyOfRange(i, img.size))
                     if (d.size > 6 && String(d, 0, 6, Charsets.ISO_8859_1) == "070701") cpio(d) else null
                 }.getOrNull()
-                if (entries != null && entries.any { it.name.removePrefix("./") == "init.rc" }) return entries
+                if (entries != null && holdsInitScript(entries)) return entries
             }
             i++
+        }
+        return null
+    }
+
+    /**
+     * True if [entries] hold an init script: /init.rc, or the pre-1.0 /etc/init.rc, which counts only if it is written in
+     * the old block syntax (env { } startup { } service { }): a modern initramfs has an /etc, but no such file.
+     */
+    fun holdsInitScript(entries: List<CpioEntry>): Boolean = entries.any { e ->
+        when (e.name.removePrefix("./").trimStart('/')) {
+            "init.rc" -> true
+            "etc/init.rc" -> LegacyFirmware.isLegacyInitRc(String(e.data, Charsets.ISO_8859_1))
+            else -> false
+        }
+    }
+
+    /**
+     * The ramdisk partition of the 2007 HTC Sooner (mtdblock5 of a NAND dump): a 4 byte little endian length, then a gzip
+     * stream of that length holding a newc cpio with /etc/init.rc in the old block syntax; the rest of the partition is
+     * erased flash. The same stream without the length (a ramdisk.gz cut out of a dump) is read too. Null if [raw] is
+     * neither, or the archive holds no init script.
+     */
+    fun legacyRamdisk(raw: ByteArray): List<CpioEntry>? {
+        for (off in intArrayOf(4, 0)) {
+            if (raw.size < off + 32) continue
+            if (raw[off] != 0x1f.toByte() || raw[off + 1] != 0x8b.toByte() || raw[off + 2] != 0x08.toByte()) continue
+            var end = raw.size
+            if (off == 4) {
+                val n = ByteBuffer.wrap(raw, 0, 4).order(ByteOrder.LITTLE_ENDIAN).getInt().toLong() and 0xffffffffL
+                if (n < 32 || n > raw.size - 4L) continue
+                end = (4 + n).toInt()
+            }
+            val d = runCatching { gunzipLenient(raw.copyOfRange(off, end)) }.getOrNull() ?: continue
+            if (d.size < 6 || String(d, 0, 6, Charsets.ISO_8859_1) != "070701") continue
+            val entries = runCatching { cpio(d) }.getOrNull()?.takeIf { it.isNotEmpty() } ?: continue
+            if (holdsInitScript(entries)) return entries
         }
         return null
     }

@@ -530,4 +530,12 @@
     <string name="phantom_open_dev">Oscail Roghanna Forbróra</string>
     <string name="phantom_ignore">Déan neamhaird</string>
     <string name="phantom_never">Ná cuir i gcuimhne arís</string>
+    <string name="vs_netdebug">Dífhabhsálaí HTTP</string>
+    <string name="vs_netdebug_sub">Logálann sé iarratais HTTP agus HTTPS an aoi agus is féidir leis freagra a thabhairt orthu nó iad a athrú (roghchlár › Dífhabhsálaí HTTP). Cuireann sé CA dífhabhsaithe i stór iontaobhais an aoi. Feidhmíonn sé ag an gcéad tosú iomlán eile.</string>
+    <string name="m_netdebug">Dífhabhsálaí HTTP</string>
+    <string name="vs_skip_perm_wait">Scipeáil fanacht leis an rialaitheoir ceadanna (Android 10-13)</string>
+    <string name="vs_skip_perm_wait_sub">Do dhatháin x86 ar fhón ARM, nuair a bhíonn aip an rialaitheora ceadanna rómhall le freagra a thabhairt laistigh de 60 s agus go gcuirtear deireadh le system_server (“Error granting/upgrading runtime permissions”). Paitseálann sé services.jar an dathábhair ionas nach bhfanann an tosú leis na ceadanna réamhshocraithe rite; ní fhaigheann aipeanna réamhshuiteáilte na ceadanna sin ag an tosú ansin. Cuirtear cosc ar dex2oat an jar paitseáilte a athchomhdhlú. Athchuireann sé an jar bunaidh nuair a mhúchtar é. Feidhmíonn sé ag an gcéad tosú iomlán eile.</string>
+    <string name="catalog_download_checking">Ag seiceáil an naisc…</string>
+    <string name="catalog_download_title">ROM á íoslódáil</string>
+    <string name="catalog_download_failed">Theip ar an íoslódáil: %1$s</string>
 </resources>

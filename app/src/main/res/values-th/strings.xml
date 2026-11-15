@@ -523,4 +523,12 @@
     <string name="phantom_open_dev">เปิดตัวเลือกสำหรับนักพัฒนา</string>
     <string name="phantom_ignore">ละเว้น</string>
     <string name="phantom_never">ไม่ต้องเตือนอีก</string>
+    <string name="vs_netdebug">ตัวดีบัก HTTP</string>
+    <string name="vs_netdebug_sub">บันทึกคำขอ HTTP และ HTTPS ของเครื่องเสมือนและสามารถตอบกลับหรือแก้ไขได้ (เมนู › ตัวดีบัก HTTP) เพิ่ม CA สำหรับดีบักลงในที่เก็บความน่าเชื่อถือของเครื่องเสมือน มีผลเมื่อเริ่มระบบเต็มรูปแบบครั้งถัดไป</string>
+    <string name="m_netdebug">ตัวดีบัก HTTP</string>
+    <string name="vs_skip_perm_wait">ข้ามการรอตัวควบคุมสิทธิ์ (Android 10-13)</string>
+    <string name="vs_skip_perm_wait_sub">สำหรับเฟิร์มแวร์ x86 บนโทรศัพท์ ARM ที่แอปตัวควบคุมสิทธิ์ช้าเกินไปจนตอบกลับไม่ทันใน 60 วินาที และ system_server ถูกปิด (\"Error granting/upgrading runtime permissions\") แพตช์ services.jar ของเฟิร์มแวร์เพื่อไม่ให้การบูตรอการให้สิทธิ์รันไทม์เริ่มต้น แอปที่ติดตั้งมาล่วงหน้าจึงไม่ได้รับสิทธิ์เหล่านั้นตอนบูต dex2oat จะไม่คอมไพล์ jar ที่แพตช์แล้วใหม่ การปิดตัวเลือกนี้จะคืนค่า jar เดิม มีผลเมื่อบูตเต็มรูปแบบครั้งถัดไป</string>
+    <string name="catalog_download_checking">กำลังตรวจสอบลิงก์…</string>
+    <string name="catalog_download_title">กำลังดาวน์โหลด ROM</string>
+    <string name="catalog_download_failed">ดาวน์โหลดไม่สำเร็จ: %1$s</string>
 </resources>

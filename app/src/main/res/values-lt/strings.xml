@@ -529,4 +529,12 @@
     <string name="phantom_open_dev">Atidaryti kūrėjo parinktis</string>
     <string name="phantom_ignore">Ignoruoti</string>
     <string name="phantom_never">Daugiau nebepriminti</string>
+    <string name="vs_netdebug">HTTP derintuvas</string>
+    <string name="vs_netdebug_sub">Registruoja svečio HTTP ir HTTPS užklausas ir gali į jas atsakyti arba jas keisti (meniu › HTTP derintuvas). Įdeda derinimo CA į svečio patikimų sertifikatų saugyklą. Taikoma kitą kartą paleidus visiškai.</string>
+    <string name="m_netdebug">HTTP derintuvas</string>
+    <string name="vs_skip_perm_wait">Praleisti leidimų valdiklio laukimą („Android 10–13“)</string>
+    <string name="vs_skip_perm_wait_sub">Skirta x86 programinei įrangai ARM telefone, kai leidimų valdiklio programa per lėta, kad atsakytų per 60 s, ir „system_server“ nutraukiamas („Error granting/upgrading runtime permissions“). Pataiso programinės įrangos „services.jar“, kad paleidimas nelauktų numatytųjų vykdymo laiko leidimų suteikimo; iš anksto įdiegtos programos tada paleidžiant tų leidimų negauna. „dex2oat“ neleidžiama iš naujo kompiliuoti pataisyto jar failo. Išjungus atkuriamas originalus jar failas. Įsigalioja kitą kartą visiškai paleidus.</string>
+    <string name="catalog_download_checking">Tikrinama nuoroda…</string>
+    <string name="catalog_download_title">Atsisiunčiamas ROM</string>
+    <string name="catalog_download_failed">Atsisiųsti nepavyko: %1$s</string>
 </resources>

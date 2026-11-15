@@ -45,6 +45,13 @@ object LegacyFirmware {
 
     const val PRE_RELEASE_TRANSLATOR = "libqemu_arm_pre1.0.so"
 
+    /**
+     * libqemu_kk.so with only the framebuffer answer changed (yres_virtual = 2 * yres, tools/patch_qemu_fb_yres.py): the translator for
+     * Android 1.0 / 1.1 images (API 1 and 2) that are not pre-1.0 builds. Without it libagl finds no second page, stops page flipping and
+     * the screen stays black. The pre-1.0 translator carries the same change on top of its own.
+     */
+    const val API1_TRANSLATOR = "libqemu_arm_1.0.so"
+
     /** True for an image the importer recorded as a pre-1.0 build (release "0.9", see [PRE_RELEASE_RELEASE]). */
     fun isPreRelease(release: String): Boolean = release.startsWith("0.")
 
@@ -301,6 +308,52 @@ object LegacyFirmware {
             Files.createSymbolicLink(at.toPath(), Paths.get("graphics/fb0"))
             true
         }.getOrDefault(false)
+    }
+
+    // ------------------------------------------------------------------------------------------------------ JamVM
+
+    /** Added for AEmulator Plus (2026-11-15). The values of `runtime.vm` that the runtime of these builds knows. */
+    const val VM_JAM = "jam"
+    const val VM_DALVIK = "dalvik"
+
+    /**
+     * The environment variable the runtime reads before the property (strings of libjava_runtime.so: ANDROIDVM, then
+     * runtime.vm, "dalvik" and "jam"). Set for a JamVM tree as well as the property, so the choice does not depend on the
+     * property service having answered.
+     */
+    const val VM_ENV = "ANDROIDVM"
+
+    /**
+     * Pre-1.0 builds carry two virtual machines: Dalvik (libdvm.so, dex jars) and JamVM 1.4.1 (libjamvm.so, plain class files),
+     * and the runtime picks one with the property `runtime.vm` (default "dalvik"; build 20645 ships `runtime.vm=jam` in
+     * build.prop and class-file jars in /javalib). The VM is taken from the tree:
+     *
+     *  1. `runtime.vm` of system/build.prop, when it is one of the two names;
+     *  2. otherwise "jam" if the tree has libjamvm.so and the boot jars are class files (no classes.dex in core.jar);
+     *  3. otherwise null: the default of the runtime ("dalvik") stands.
+     *
+     * Null for anything that is not a pre-1.0 tree.
+     */
+    fun runtimeVm(root: File): String? {
+        val sys = File(root, "system")
+        if (!isLegacyLayout(root) && !linksAgainstAndroidDir(root) && !File(sys, "javalib").isDirectory) return null
+        val declared = runCatching {
+            File(sys, "build.prop").takeIf { it.isFile }?.readLines()
+                ?.map { it.trim() }?.firstOrNull { it.startsWith("runtime.vm=") }
+                ?.substringAfter('=')?.trim()?.lowercase()
+        }.getOrNull()
+        if (declared == VM_JAM || declared == VM_DALVIK) return declared
+        val libDir = File(sys, "lib")
+        if (File(libDir, "libjamvm.so").isFile && !bootJarsHaveDex(sys)) return VM_JAM
+        return null
+    }
+
+    fun usesJamVm(root: File): Boolean = runtimeVm(root) == VM_JAM
+
+    /** True if core.jar (in javalib or framework) holds a classes.dex: the dex VM's boot jars. */
+    private fun bootJarsHaveDex(sys: File): Boolean {
+        val core = listOf("javalib", "framework").map { File(sys, "$it/core.jar") }.firstOrNull { it.isFile } ?: return false
+        return runCatching { java.util.zip.ZipFile(core).use { it.getEntry("classes.dex") != null } }.getOrDefault(false)
     }
 
     // ------------------------------------------------------------------------------------------------------ build.prop

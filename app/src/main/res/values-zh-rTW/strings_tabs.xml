@@ -8,4 +8,12 @@
     <string name="tab_minimize">最小化</string>
     <string name="tab_shutdown">關機</string>
     <string name="vm_slots_full">%1$d 個虛擬機位置已全部使用，請先關閉其中一個。</string>
+    <string name="tab_group_title">2 個分頁</string>
+    <string name="tab_split_failed">該虛擬機無法再加入此分頁。</string>
+    <string name="tab_drag_label">拖曳到畫面上進行分割</string>
+    <string name="tab_split_title">拆分 2 個分頁？</string>
+    <string name="tab_split_text">每台虛擬機會回到各自的分頁。兩者都會繼續執行。</string>
+    <string name="tab_split_action">拆分</string>
+    <string name="tab_bar_hide">隱藏分頁列</string>
+    <string name="tab_bar_show">顯示分頁列</string>
 </resources>

@@ -231,4 +231,7 @@
     <string name="imp_choice_text">Ovaj paket sadrži više od jedne stavke (%1$s): %2$d od %3$d. Odaberite onu koju želite uvesti.</string>
     <string name="imp_choice_ok">Uvezi</string>
     <string name="imp_choice_cancel">Otkaži uvoz</string>
+    <string name="ota_squash_files_modified">Fajlove u /system (%1$d) promijenila je aplikacija ili vi i ne mogu se ponovo izgraditi, npr. %2$s. SquashFS sistemska slika može se ponovo izgraditi samo iz nepromijenjenih fajlova. Ništa nije promijenjeno.</string>
+    <string name="imp_unreadable_mbr">%1$s: nečitljiva tabela particija MBR</string>
+    <string name="imp_no_system_partition_in_mbr">%1$s: nema sistemske particije u MBR-u</string>
 </resources>

@@ -232,4 +232,7 @@
     <string name="imp_choice_text">Dit pakket bevat meer dan één %1$s (%2$d van %3$d). Kies degene die je wilt importeren.</string>
     <string name="imp_choice_ok">Importeren</string>
     <string name="imp_choice_cancel">Import annuleren</string>
+    <string name="ota_squash_files_modified">%1$d bestanden in /system zijn door de app of door jou gewijzigd en kunnen niet opnieuw worden opgebouwd, bijv. %2$s. Een SquashFS-systeemimage kan alleen uit ongewijzigde bestanden worden opgebouwd. Er is niets gewijzigd.</string>
+    <string name="imp_unreadable_mbr">%1$s: onleesbare MBR-partitietabel</string>
+    <string name="imp_no_system_partition_in_mbr">%1$s: geen systeempartitie in MBR</string>
 </resources>

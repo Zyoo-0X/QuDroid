@@ -526,4 +526,12 @@
     <string name="phantom_open_dev">Buksan ang Developer Options</string>
     <string name="phantom_ignore">Huwag pansinin</string>
     <string name="phantom_never">Huwag nang ipaalala</string>
+    <string name="vs_netdebug">HTTP debugger</string>
+    <string name="vs_netdebug_sub">Nila-log ang mga kahilingang HTTP at HTTPS ng guest at maaari itong sagutin o baguhin ang mga ito (menu › HTTP debugger). Naglalagay ng debugging CA sa trust store ng guest. Magkakabisa sa susunod na buong pagsisimula.</string>
+    <string name="m_netdebug">HTTP debugger</string>
+    <string name="vs_skip_perm_wait">Laktawan ang paghihintay sa permission controller (Android 10-13)</string>
+    <string name="vs_skip_perm_wait_sub">Para sa x86 firmware sa ARM na telepono, kung saan masyadong mabagal ang permission controller app para sumagot sa loob ng 60 s at pinapatay ang system_server (\"Error granting/upgrading runtime permissions\"). Pina-patch ang services.jar ng firmware para hindi maghintay ang boot sa mga default na runtime permission grant; hindi na makukuha ng mga preinstalled na app ang mga permission na iyon sa boot. Pinipigilan ang dex2oat na i-recompile ang na-patch na jar. Ibinabalik ng pag-off ang orihinal na jar. Magkakabisa sa susunod na buong boot.</string>
+    <string name="catalog_download_checking">Sinusuri ang link…</string>
+    <string name="catalog_download_title">Dina-download ang ROM</string>
+    <string name="catalog_download_failed">Nabigo ang pag-download: %1$s</string>
 </resources>

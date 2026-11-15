@@ -523,4 +523,12 @@
     <string name="phantom_open_dev">Buka Pilihan Pembangun</string>
     <string name="phantom_ignore">Abaikan</string>
     <string name="phantom_never">Jangan ingatkan lagi</string>
+    <string name="vs_netdebug">Penyahpepijat HTTP</string>
+    <string name="vs_netdebug_sub">Merekodkan permintaan HTTP dan HTTPS tetamu dan boleh menjawab atau mengubahnya (menu › Penyahpepijat HTTP). Meletakkan CA penyahpepijatan ke dalam stor kepercayaan tetamu. Berkuat kuasa pada permulaan penuh seterusnya.</string>
+    <string name="m_netdebug">Penyahpepijat HTTP</string>
+    <string name="vs_skip_perm_wait">Langkau menunggu pengawal kebenaran (Android 10-13)</string>
+    <string name="vs_skip_perm_wait_sub">Untuk perisian tegar x86 pada telefon ARM, apabila aplikasi pengawal kebenaran terlalu perlahan untuk menjawab dalam 60 s dan system_server ditamatkan (\"Error granting/upgrading runtime permissions\"). Menampal services.jar perisian tegar supaya but tidak menunggu pemberian kebenaran masa jalan lalai; aplikasi pasang siap kemudian tidak mendapat kebenaran tersebut semasa but. dex2oat dihalang daripada mengompil semula jar yang ditampal. Mematikannya memulihkan jar asal. Berkuat kuasa pada but penuh seterusnya.</string>
+    <string name="catalog_download_checking">Menyemak pautan…</string>
+    <string name="catalog_download_title">Memuat turun ROM</string>
+    <string name="catalog_download_failed">Muat turun gagal: %1$s</string>
 </resources>

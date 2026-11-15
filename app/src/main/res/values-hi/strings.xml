@@ -525,4 +525,12 @@
     <string name="phantom_open_dev">डेवलपर विकल्प खोलें</string>
     <string name="phantom_ignore">अनदेखा करें</string>
     <string name="phantom_never">दोबारा याद न दिलाएँ</string>
+    <string name="vs_netdebug">HTTP डीबगर</string>
+    <string name="vs_netdebug_sub">गेस्ट के HTTP और HTTPS अनुरोध लॉग करता है और उनका जवाब दे सकता या उन्हें बदल सकता है (मेन्यू › HTTP डीबगर)। गेस्ट के ट्रस्ट स्टोर में एक डीबगिंग CA जोड़ता है। अगली पूरी शुरुआत पर लागू होता है।</string>
+    <string name="m_netdebug">HTTP डीबगर</string>
+    <string name="vs_skip_perm_wait">अनुमति कंट्रोलर का इंतज़ार छोड़ें (Android 10-13)</string>
+    <string name="vs_skip_perm_wait_sub">ARM फ़ोन पर x86 फ़र्मवेयर के लिए, जहाँ अनुमति कंट्रोलर ऐप 60 सेकंड में जवाब देने के लिए बहुत धीमा है और system_server बंद हो जाता है (\"Error granting/upgrading runtime permissions\")। फ़र्मवेयर की services.jar को पैच करता है ताकि बूट डिफ़ॉल्ट रनटाइम अनुमतियों का इंतज़ार न करे; इस स्थिति में पहले से इंस्टॉल ऐप को बूट पर वे अनुमतियाँ नहीं मिलतीं। dex2oat को पैच की गई jar दोबारा कंपाइल करने से रोका जाता है। बंद करने पर मूल jar वापस आ जाती है। अगले पूरे बूट पर लागू होता है।</string>
+    <string name="catalog_download_checking">लिंक जाँची जा रही है…</string>
+    <string name="catalog_download_title">ROM डाउनलोड हो रहा है</string>
+    <string name="catalog_download_failed">डाउनलोड विफल: %1$s</string>
 </resources>

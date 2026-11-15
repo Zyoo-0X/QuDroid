@@ -57,15 +57,15 @@ class LibraryModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun import(uri: Uri) {
-        if (_import.value.active) return
+    /** [deleteWhenDone]: the file is a temporary download; it is removed once it was imported. */
+    fun import(uri: Uri, deleteWhenDone: Boolean = false): Unit = import(listOf(uri), deleteWhenDone)
+
+    /** Several files make ONE machine: a system image together with its boot image, say. */
+    fun import(uris: List<Uri>, deleteWhenDone: Boolean = false) {
+        if (uris.isEmpty() || _import.value.active) return
         val ctx = getApplication<Application>()
-        val name = runCatching {
-            ctx.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
-                if (c.moveToFirst()) c.getString(0) else null
-            }
-        }.getOrNull() ?: uri.lastPathSegment?.substringAfterLast('/') ?: lctx.getString(R.string.import_default_name)
-        _import.value = ImportState(active = true, file = name, step = lctx.getString(R.string.import_start))
+        val names = uris.map { displayName(it) }
+        _import.value = ImportState(active = true, file = names.joinToString(", "), step = lctx.getString(R.string.import_start))
         viewModelScope.launch(Dispatchers.IO) {
             val log = ArrayList<String>()
             val imp = Importer(ctx,
@@ -75,16 +75,17 @@ class LibraryModel(app: Application) : AndroidViewModel(app) {
             importer = imp
             try {
                 // умолчания из настроек приложения поверх того, что подобрал анализатор (экран, частоты)
-                val raw = imp.import(uri, name)
+                val raw = imp.importAll(uris.zip(names) { u, n -> Importer.Source(u, n) })
                 val d = app.aemu.AppPrefs.defaults(ctx)
                 // A VM archive already contains the user's complete settings.
-                val img = if (name.endsWith(".aessvm", true)) raw else raw.copy(settings = raw.settings.copy(gpu = d.gpu, jit = d.jit, netProxy = d.netProxy,
+                val img = if (names.any { it.endsWith(".aessvm", true) }) raw else raw.copy(settings = raw.settings.copy(gpu = d.gpu, jit = d.jit && !(raw.arch.foreign.let { it && raw.arch != app.aemu.core.GuestArch.ARM }), netProxy = d.netProxy,
                     showNavBar = d.showNavBar, navButtons = d.navButtons, trackball = d.trackball,
                     trackballDpad = d.trackballDpad, trackballStepDp = d.trackballStepDp,
                     mouseKeyboard = d.mouseKeyboard, keypad = d.keypad,
                     keepScreenOn = d.keepScreenOn, showLed = d.showLed))
                 if (img != raw) ImageStore.save(ctx, img)
                 _import.value = _import.value.copy(active = false, done = img, step = lctx.getString(R.string.import_ready), progress = 1f)
+                if (deleteWhenDone) uris.forEach { u -> if (u.scheme == "file") u.path?.let { java.io.File(it).delete() } }
             } catch (t: Throwable) {
                 _import.value = _import.value.copy(active = false, error = failureText(t))
             } finally {
@@ -92,6 +93,16 @@ class LibraryModel(app: Application) : AndroidViewModel(app) {
                 refresh()
             }
         }
+    }
+
+    private fun displayName(uri: Uri): String {
+        if (uri.scheme == "file") uri.path?.let { return java.io.File(it).name }
+        val ctx = getApplication<Application>()
+        return runCatching {
+            ctx.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                if (c.moveToFirst()) c.getString(0) else null
+            }
+        }.getOrNull() ?: uri.lastPathSegment?.substringAfterLast('/') ?: lctx.getString(R.string.import_default_name)
     }
 
     fun clone(src: GuestImage, name: String, copyData: Boolean, customSettings: app.aemu.core.VmSettings? = null) {

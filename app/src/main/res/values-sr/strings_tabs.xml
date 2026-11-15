@@ -8,4 +8,12 @@
     <string name="tab_minimize">Умањи</string>
     <string name="tab_shutdown">Угаси</string>
     <string name="vm_slots_full">Сва %1$d места за машине су заузета. Прво угасите једну.</string>
+    <string name="tab_group_title">2 картице</string>
+    <string name="tab_split_failed">Та машина се више не може додати овој картици.</string>
+    <string name="tab_drag_label">Превуците на екран за поделу</string>
+    <string name="tab_split_title">Раздвојити 2 картице?</string>
+    <string name="tab_split_text">Свака машина се враћа на своју картицу. Обе настављају да раде.</string>
+    <string name="tab_split_action">Раздвој</string>
+    <string name="tab_bar_hide">Сакриј траку картица</string>
+    <string name="tab_bar_show">Прикажи траку картица</string>
 </resources>

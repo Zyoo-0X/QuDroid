@@ -54,6 +54,9 @@
     <string name="vs_memory_medium_sub">Balanced: keeps a moderate number of background apps and stops the rest when free memory gets low. Takes effect after a full VM restart.</string>
     <string name="vs_memory_aggressive_sub">Keeps few background apps and checks often, so memory is freed early. Uses the least memory, but apps restart more often. Takes effect after a full VM restart.</string>
     <string name="vs_proxy">Modern TLS proxy</string>
+    <string name="vs_netdebug">HTTP debugger</string>
+    <string name="vs_netdebug_sub">Logs the guest’s HTTP and HTTPS requests and can answer or change them (menu › HTTP debugger). Puts a debugging CA into the guest’s trust store. Applies at the next full start.</string>
+    <string name="m_netdebug">HTTP debugger</string>
     <string name="vs_proxy_sub">Lets old browsers and apps open today’s HTTPS sites.</string>
     <string name="vs_controls">Controls</string>
     <string name="vs_nav">Android button bar</string>
@@ -493,6 +496,8 @@
     <string name="vs_art_boot_image">Use ART boot image (Android 14+)</string>
     <string name="vs_art_boot_image_sub">Off: the guest runs without a boot image. Start-up is slower, but nothing of the image can fail. On: the emulator prepares a boot image for this runtime (built once at the next start, which takes a while).</string>
     <string name="vs_no_watchdog">Disable system watchdog (Android 14+)</string>
+    <string name="vs_skip_perm_wait">Skip permission controller wait (Android 10-13)</string>
+    <string name="vs_skip_perm_wait_sub">For x86 firmware on an ARM phone, where the permission controller app is too slow to answer within 60 s and system_server is killed ("Error granting/upgrading runtime permissions"). Patches the firmware\'s services.jar so the boot does not wait for the default runtime permission grants; preinstalled apps then do not get those grants at boot. dex2oat is kept from recompiling the patched jar. Turning it off restores the stock jar. Takes effect on the next full boot.</string>
     <string name="vs_no_watchdog_sub">For a boot that is slower than Android\'s 60 s watchdog limit, which kills system_server in a loop. Patches the firmware\'s services.jar so the watchdog thread ends at once; a real system deadlock is then no longer recovered by a restart. The jar\'s precompiled code is ignored, which can make the first boot slower. Turning it off restores the stock jar. Takes effect on the next full boot.</string>
     <string name="vs_thermal">Thermal passthrough</string>
     <string name="vs_thermal_sub">Off: the guest\'s thermal_zone17 always reads 30 °C, so firmware that blocks the screen when hot (Xiaomi overheat overlay) keeps working. On: it reads the phone\'s own sensor. A value set from the machine\'s menu always wins. Takes effect on the next start.</string>
@@ -529,4 +534,9 @@
     <string name="phantom_open_dev">Open Developer Options</string>
     <string name="phantom_ignore">Ignore</string>
     <string name="phantom_never">Never remind again</string>
+
+    <!-- . -->
+    <string name="catalog_download_checking">Checking link…</string>
+    <string name="catalog_download_title">Downloading ROM</string>
+    <string name="catalog_download_failed">Download failed: %1$s</string>
 </resources>

@@ -533,4 +533,12 @@
     <string name="phantom_open_dev">فتح خيارات المطوّر</string>
     <string name="phantom_ignore">تجاهل</string>
     <string name="phantom_never">عدم التذكير مرة أخرى</string>
+    <string name="vs_netdebug">مصحّح أخطاء HTTP</string>
+    <string name="vs_netdebug_sub">يسجّل طلبات HTTP وHTTPS الخاصة بالنظام الضيف ويمكنه الرد عليها أو تعديلها (القائمة › مصحّح أخطاء HTTP). يضيف جهة إصدار شهادات لتصحيح الأخطاء إلى مخزن الثقة في النظام الضيف. يُطبَّق عند التشغيل الكامل التالي.</string>
+    <string name="m_netdebug">مصحّح أخطاء HTTP</string>
+    <string name="vs_skip_perm_wait">تخطّي انتظار وحدة التحكم بالأذونات (Android 10-13)</string>
+    <string name="vs_skip_perm_wait_sub">لبرنامج x86 الثابت على هاتف ARM، حيث يكون تطبيق وحدة التحكم بالأذونات بطيئًا جدًا فلا يردّ خلال 60 ثانية فيُنهى system_server (\"Error granting/upgrading runtime permissions\"). يعدّل ملف services.jar في البرنامج الثابت كي لا ينتظر الإقلاع منح أذونات وقت التشغيل الافتراضية؛ وبالتالي لا تحصل التطبيقات المثبّتة مسبقًا على هذه الأذونات عند الإقلاع. يُمنع dex2oat من إعادة تجميع ملف jar المعدَّل. يؤدي إيقافه إلى استعادة ملف jar الأصلي. يسري عند الإقلاع الكامل التالي.</string>
+    <string name="catalog_download_checking">جارٍ التحقق من الرابط…</string>
+    <string name="catalog_download_title">جارٍ تنزيل ROM</string>
+    <string name="catalog_download_failed">فشل التنزيل: %1$s</string>
 </resources>

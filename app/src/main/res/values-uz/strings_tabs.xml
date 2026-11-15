@@ -8,4 +8,12 @@
     <string name="tab_minimize">Kichraytirish</string>
     <string name="tab_shutdown">Oʻchirish</string>
     <string name="vm_slots_full">Mashinaning barcha %1$d uyasi band. Avval bittasini oʻchiring.</string>
+    <string name="tab_group_title">2 ta varaq</string>
+    <string name="tab_split_failed">Bu mashinani endi ushbu varaqqa qoʻshib boʻlmaydi.</string>
+    <string name="tab_drag_label">Boʻlish uchun ekranga torting</string>
+    <string name="tab_split_title">2 ta varaq ajratilsinmi?</string>
+    <string name="tab_split_text">Har bir mashina oʻz varagʻiga qaytadi. Ikkalasi ham ishlashda davom etadi.</string>
+    <string name="tab_split_action">Ajratish</string>
+    <string name="tab_bar_hide">Varaqlar panelini yashirish</string>
+    <string name="tab_bar_show">Varaqlar panelini koʻrsatish</string>
 </resources>

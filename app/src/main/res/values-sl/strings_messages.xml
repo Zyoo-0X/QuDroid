@@ -232,4 +232,7 @@
     <string name="imp_choice_text">Ta paket vsebuje več kot eno stvar (%1$s): %2$d od %3$d. Izberite tisto, ki jo želite uvoziti.</string>
     <string name="imp_choice_ok">Uvozi</string>
     <string name="imp_choice_cancel">Prekliči uvoz</string>
+    <string name="ota_squash_files_modified">Aplikacija ali vi ste spremenili datoteke v /system (%1$d) in jih ni mogoče znova zgraditi, npr. %2$s. Sistemsko sliko SquashFS je mogoče znova zgraditi le iz nespremenjenih datotek. Nič ni bilo spremenjeno.</string>
+    <string name="imp_unreadable_mbr">%1$s: neberljiva tabela particij MBR</string>
+    <string name="imp_no_system_partition_in_mbr">%1$s: v MBR ni sistemske particije</string>
 </resources>

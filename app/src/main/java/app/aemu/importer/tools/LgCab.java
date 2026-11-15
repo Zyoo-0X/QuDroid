@@ -29,8 +29,9 @@ import java.util.zip.Inflater;
  * CAB reader was in the project.
  *
  * <p>The cabinet is never written to disk decrypted: {@link #decrypting} decrypts while {@link #extract} reads it.
- * Only stored (0) and MSZIP (1) folders are supported; they are what the KDZ cabinets use. Quantum and LZX folders,
- * and files continued in another cabinet, are reported as unsupported.
+ * Stored (0), MSZIP (1) and LZX (3, see {@link LzxDecoder}) folders are supported; the KDZ cabinets use the first two,
+ * Windows servicing packages (MS_ProjectA's aow.wim) the last. Quantum folders, and files continued in another
+ * cabinet, are reported as unsupported.
  */
 final class LgCab {
     private LgCab() {}
@@ -104,14 +105,20 @@ final class LgCab {
 
     // ================================================================== detection
 
-    /** True when the 12 first bytes decrypt (with the key of a file of {@code size} bytes) to a CAB header. */
+    /**
+     * True when the 12 first bytes decrypt (with the key of a file of {@code size} bytes) to a CAB header. The two
+     * reserved fields of a cabinet are zero in Microsoft's makecab but not in LG's tool (D605 / Optimus L9 II: the
+     * first one is junk), so they cannot be demanded; instead the size the cabinet declares has to be the file's own.
+     */
     static boolean isEncryptedKdz(byte[] head, long size) {
         if (head == null || head.length < 12 || size < CAB_HEADER) return false;
         byte[] key = deriveKey(size);
         if (key == null) return false;
         byte[] d = Arrays.copyOf(head, 12);
         new Rc4(key).crypt(d, 0, 12);
-        return isCabHeader(d);
+        if (!isCabHeader(d)) return false;
+        boolean reservedZero = d[4] == 0 && d[5] == 0 && d[6] == 0 && d[7] == 0;
+        return reservedZero || LgKdz.u32(d, 8) == size;
     }
 
     static boolean isEncryptedKdz(File f) {
@@ -125,10 +132,9 @@ final class LgCab {
         }
     }
 
-    /** "MSCF" and the reserved field after it equal to zero. */
+    /** The "MSCF" signature. (The reserved field after it is not always zero: LG's cabinets put junk there.) */
     static boolean isCabHeader(byte[] h) {
-        return h != null && h.length >= 8 && h[0] == 'M' && h[1] == 'S' && h[2] == 'C' && h[3] == 'F'
-            && h[4] == 0 && h[5] == 0 && h[6] == 0 && h[7] == 0;
+        return h != null && h.length >= 8 && h[0] == 'M' && h[1] == 'S' && h[2] == 'C' && h[3] == 'F';
     }
 
     // ================================================================== byte sources
@@ -180,7 +186,7 @@ final class LgCab {
     }
 
     static final class Folder {
-        long dataOff; int blocks, method;
+        long dataOff; int blocks, method, windowBits;
     }
 
     static final class Cab {
@@ -229,6 +235,7 @@ final class LgCab {
             fo.dataOff = u32(f, 0);
             fo.blocks = u16(f, 4);
             fo.method = u16(f, 6) & 0x0F;
+            fo.windowBits = (u16(f, 6) >> 8) & 0x1F;
             cab.folders.add(fo);
             pos += 8 + cbFolderReserve;
         }
@@ -299,13 +306,14 @@ final class LgCab {
     }
 
     private static void decodeFolder(Src s, Cab cab, Folder fo, List<Member> mine, File[] files, long need, Consumer<String> log) throws IOException {
-        if (fo.method != 0 && fo.method != 1) {
-            String name = fo.method == 2 ? "Quantum" : fo.method == 3 ? "LZX" : "type " + fo.method;
+        if (fo.method != 0 && fo.method != 1 && fo.method != 3) {
+            String name = fo.method == 2 ? "Quantum" : "type " + fo.method;
             throw new IOException("CAB: " + name + " compression is not supported");
         }
         OutputStream[] outs = new OutputStream[files.length];
         for (Member m : mine) if (m.size == 0) new FileOutputStream(files[m.index]).close();
         Inflater inf = fo.method == 1 ? new Inflater(true) : null;
+        LzxDecoder lzx = fo.method == 3 ? new LzxDecoder(fo.windowBits) : null;
         byte[] prev = new byte[0];
         byte[] outBuf = new byte[1 << 15];
         long pos = fo.dataOff, upos = 0;
@@ -320,6 +328,10 @@ final class LgCab {
                 if (fo.method == 0) {
                     if (cbData != cbUncomp) throw new IOException("CAB: stored block has two sizes");
                     out = data;
+                } else if (lzx != null) {
+                    if (cbUncomp > 32768) throw new IOException("CAB: LZX block " + b + " is larger than 32 KB");
+                    out = new byte[cbUncomp];
+                    lzx.decodeFrame(data, cbData, out, cbUncomp);
                 } else {
                     if (cbData < 2 || data[0] != 'C' || data[1] != 'K') throw new IOException("CAB: MSZIP block " + b + " has no CK signature");
                     if (cbUncomp > outBuf.length) throw new IOException("CAB: MSZIP block " + b + " is larger than 32 KB");

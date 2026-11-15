@@ -8,4 +8,12 @@
     <string name="tab_minimize">Згорнути</string>
     <string name="tab_shutdown">Вимкнути</string>
     <string name="vm_slots_full">Усі слоти машин (%1$d) зайняті. Спершу вимкніть одну.</string>
+    <string name="tab_group_title">2 вкладки</string>
+    <string name="tab_split_failed">Цю машину більше не можна додати до цієї вкладки.</string>
+    <string name="tab_drag_label">Перетягніть на екран, щоб розділити</string>
+    <string name="tab_split_title">Розділити 2 вкладки?</string>
+    <string name="tab_split_text">Кожна машина повернеться на окрему вкладку. Обидві продовжать працювати.</string>
+    <string name="tab_split_action">Розділити</string>
+    <string name="tab_bar_hide">Сховати панель вкладок</string>
+    <string name="tab_bar_show">Показати панель вкладок</string>
 </resources>

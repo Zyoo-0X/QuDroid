@@ -8,4 +8,12 @@
     <string name="tab_minimize">Sakļaut</string>
     <string name="tab_shutdown">Izslēgt</string>
     <string name="vm_slots_full">Visas %1$d mašīnu vietas ir aizņemtas. Vispirms izslēdziet kādu.</string>
+    <string name="tab_group_title">2 cilnes</string>
+    <string name="tab_split_failed">Šo mašīnu vairs nevar pievienot šai cilnei.</string>
+    <string name="tab_drag_label">Velciet uz ekrānu, lai sadalītu</string>
+    <string name="tab_split_title">Atdalīt 2 cilnes?</string>
+    <string name="tab_split_text">Katra mašīna atgriežas savā cilnē. Abas turpina darboties.</string>
+    <string name="tab_split_action">Atdalīt</string>
+    <string name="tab_bar_hide">Paslēpt ciļņu joslu</string>
+    <string name="tab_bar_show">Rādīt ciļņu joslu</string>
 </resources>

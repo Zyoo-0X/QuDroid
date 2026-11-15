@@ -54,13 +54,15 @@ internal object PartitionNames {
      */
     private val NUMBERED = Regex("^[0-9]{1,3}[._-](?=[A-Za-z])")
     private fun n(base: String) = NUMBERED.replaceFirst(base, "")
+    /** [n] without a whole-file compression suffix: "system.img.xz", "vendor.img.zst", "product.img.br" name the same partitions as the plain image. */
+    private fun d(base: String) = ImageCodecs.stripSuffix(n(base))
 
     /** Image names that always mean the system partition (RFS dumps call it factoryfs). */
-    fun isSystem(base: String, bareOk: Boolean = false) = n(base).let { SYSTEM.matches(it) || bareOk && SYSTEM_BARE.matches(it) }
+    fun isSystem(base: String, bareOk: Boolean = false) = d(base).let { SYSTEM.matches(it) || bareOk && SYSTEM_BARE.matches(it) }
     /** The optional /oem partition (never boot-critical). A bare "oem" is a folder or a fastboot command, not an image. */
-    fun isOem(base: String, bareOk: Boolean = false) = n(base).let { OEM.matches(it) || bareOk && OEM_BARE.matches(it) }
+    fun isOem(base: String, bareOk: Boolean = false) = d(base).let { OEM.matches(it) || bareOk && OEM_BARE.matches(it) }
     /** The optional /vendor partition (A/B and Treble devices). Only a real image name counts, never a bare "vendor" folder. */
-    fun isVendor(base: String, bareOk: Boolean = false) = n(base).let { VENDOR.matches(it) || bareOk && VENDOR_BARE.matches(it) }
+    fun isVendor(base: String, bareOk: Boolean = false) = d(base).let { VENDOR.matches(it) || bareOk && VENDOR_BARE.matches(it) }
     fun isBoot(base: String, bareOk: Boolean = false) = n(base).let { BOOT.matches(it) || bareOk && BOOT_BARE.matches(it) }
 
     /**
@@ -69,7 +71,7 @@ internal object PartitionNames {
      * Only the active slot counts: "_b" copies are ignored.
      */
     fun extraMount(base: String, bareOk: Boolean = false): String? {
-        val name = n(base)
+        val name = d(base)
         val m = EXTRA.matchEntire(name) ?: (if (bareOk) EXTRA_BARE.matchEntire(name) else null) ?: return null
         if (m.groupValues[2].equals("_b", true)) return null
         val p = m.groupValues[1].lowercase()

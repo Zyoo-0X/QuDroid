@@ -8,4 +8,12 @@
     <string name="tab_minimize">I-minimize</string>
     <string name="tab_shutdown">I-shut down</string>
     <string name="vm_slots_full">Ginagamit na ang lahat ng %1$d slot ng machine. Mag-shut down muna ng isa.</string>
+    <string name="tab_group_title">2 tab</string>
+    <string name="tab_split_failed">Hindi na maidaragdag ang machine na iyon sa tab na ito.</string>
+    <string name="tab_drag_label">I-drag sa screen para hatiin</string>
+    <string name="tab_split_title">Hatiin ang 2 tab?</string>
+    <string name="tab_split_text">Babalik ang bawat machine sa sarili nitong tab. Parehong patuloy na tumatakbo.</string>
+    <string name="tab_split_action">Hatiin</string>
+    <string name="tab_bar_hide">Itago ang tab bar</string>
+    <string name="tab_bar_show">Ipakita ang tab bar</string>
 </resources>

@@ -525,4 +525,12 @@
     <string name="phantom_open_dev">Otevřít možnosti pro vývojáře</string>
     <string name="phantom_ignore">Ignorovat</string>
     <string name="phantom_never">Už nepřipomínat</string>
+    <string name="vs_netdebug">HTTP ladicí nástroj</string>
+    <string name="vs_netdebug_sub">Zaznamenává požadavky HTTP a HTTPS hosta a může na ně odpovídat nebo je měnit (nabídka › HTTP ladicí nástroj). Vloží ladicí certifikační autoritu do úložiště důvěryhodných certifikátů hosta. Použije se při příštím úplném spuštění.</string>
+    <string name="m_netdebug">HTTP ladicí nástroj</string>
+    <string name="vs_skip_perm_wait">Přeskočit čekání na správce oprávnění (Android 10–13)</string>
+    <string name="vs_skip_perm_wait_sub">Pro firmware x86 na telefonu s ARM, kde je aplikace správce oprávnění příliš pomalá na to, aby odpověděla do 60 s, a system_server je ukončen („Error granting/upgrading runtime permissions“). Upraví soubor services.jar firmwaru, aby spuštění nečekalo na výchozí běhová oprávnění; předinstalované aplikace pak tato oprávnění při spuštění nezískají. dex2oat nemůže upravený soubor jar znovu zkompilovat. Vypnutím se obnoví původní jar. Projeví se při příštím úplném spuštění.</string>
+    <string name="catalog_download_checking">Kontrola odkazu…</string>
+    <string name="catalog_download_title">Stahování ROM</string>
+    <string name="catalog_download_failed">Stažení se nezdařilo: %1$s</string>
 </resources>

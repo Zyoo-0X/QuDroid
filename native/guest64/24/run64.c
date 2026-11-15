@@ -503,6 +503,8 @@ static long input_ioctl(int kind, u32 cmd, u64 arg) {
 
 // ---------------------------------------------------------------------------------------------------- exec
 
+#include "../../common/aemu_nethook.h"   // HTTP debugger: AEMU64_NETDBG / AEMU64_NETDNS
+
 static int env_is_ours(const char *e) { return pre(e, "AEMU64_"); }
 
 static long do_exec(const char *path, char *const argv[], char *const envp[]) {
@@ -542,6 +544,9 @@ static long do_exec(const char *path, char *const argv[], char *const envp[]) {
     static char e_pad[135], e_kbd[135];
     if (g_pad[0]) { memcpy(e_pad, "AEMU64_PAD=", 11); memcpy(e_pad + 11, g_pad, slen(g_pad) + 1); *a++ = e_pad; }
     if (g_kbd[0]) { memcpy(e_kbd, "AEMU64_KBD=", 11); memcpy(e_kbd + 11, g_kbd, slen(g_kbd) + 1); *a++ = e_kbd; }
+    static char e_nd[32], e_ns[32];
+    if (nh_port) { memcpy(e_nd, "AEMU64_NETDBG=", 14); char t2[24], *s2 = utoa((u64)nh_port, t2 + sizeof t2); memcpy(e_nd + 14, s2, slen(s2) + 1); *a++ = e_nd; }
+    if (nh_dns) { memcpy(e_ns, "AEMU64_NETDNS=", 14); char t2[24], *s2 = utoa((u64)nh_dns, t2 + sizeof t2); memcpy(e_ns + 14, s2, slen(s2) + 1); *a++ = e_ns; }
     static char e_qemu[540];
     if (g_qemu[0]) { memcpy(e_qemu, "AEMU64_QEMU=", 12); memcpy(e_qemu + 12, g_qemu, slen(g_qemu) + 1); *a++ = e_qemu; }
     static char e_qemu64[540];
@@ -667,6 +672,83 @@ static long trap(long nr, long *a, void *uc) {
 }
 
 #define PB(i) ((*pbp ? *pbp : (*pbp = pb_get())) + (i) * PATH_MAX)
+
+// ENOBUFS on a send. The phone's kernel answers sendmsg/sendto on an AF_UNIX socket with -ENOBUFS when it cannot get memory
+// for the message (or for its ancillary data). The 16:30 boot log shows system_server's very first write to the zygote socket
+// (getAbiList) refused that way on every attempt ("Got error connecting to zygote ... No buffer space available"): no app process
+// is ever started, ActivityManager loops on CryptKeeper and the boot never ends. A real Linux never leaves that to the program,
+// so: raise this socket's send buffer once (plain SO_SNDBUF, clamped by net.core.wmem_max; the FORCE variant needs
+// CAP_NET_ADMIN) and try again for up to half a second. The first refusal of a process goes to <root>/dev/aemu-enobufs.log with
+// the kernel's limits and memory, so the cause is on record even when the retry does not help.
+#define ENOBUFS 105
+#define NR_nanosleep 101
+static int g_enobufs_noted;
+static void fput(long fd, const char *s) { S3(NR_write, fd, s, slen(s)); }
+static void fnum(long fd, u64 v) { char b[24]; fput(fd, utoa(v, b + sizeof b)); }
+static void fproc(long fd, const char *label, const char *path, long max, int keep_nl) {
+    char v[128]; long f = S4(NR_openat, AT_FDCWD, path, 0, 0), n = 0;
+    fput(fd, label);
+    if (f >= 0) { n = S3(NR_read, f, v, max < (long)sizeof v ? max : (long)sizeof v); S1(NR_close, f); }
+    if (n > 0) { if (!keep_nl) while (n > 0 && v[n - 1] == '\n') n--; S3(NR_write, fd, v, n); } else fput(fd, "?");
+    fput(fd, keep_nl ? "" : " ");
+}
+static void enobufs_note(long nr, const long *a) {
+    if (g_enobufs_noted++) return;
+    static char lp[560];
+    memcpy(lp, g_root, g_rootlen); memcpy(lp + g_rootlen, "/dev/aemu-enobufs.log", 22);
+    long fd = S4(NR_openat, AT_FDCWD, lp, 02101 /*O_WRONLY|O_CREAT|O_APPEND*/, 0600);
+    if (fd < 0) return;
+    fput(fd, nr == NR_sendmsg ? "sendmsg" : "sendto"); fput(fd, " pid="); fnum(fd, (u64)S0(NR_getpid));
+    fput(fd, " fd="); fnum(fd, (u64)a[0]);
+    if (nr == NR_sendmsg && a[1]) {
+        const struct msgh *m = (const struct msgh *)a[1];
+        u64 tot = 0;
+        for (u64 i = 0; m->iov && i < m->iovlen && i < 16; i++) tot += m->iov[i].len;
+        fput(fd, " controllen="); fnum(fd, m->controllen); fput(fd, " iovlen="); fnum(fd, m->iovlen); fput(fd, " bytes="); fnum(fd, tot);
+    } else { fput(fd, " bytes="); fnum(fd, (u64)a[2]); }
+    int sb = 0; u32 sl = 4;
+    if (S5(NR_getsockopt, a[0], 1 /*SOL_SOCKET*/, 7 /*SO_SNDBUF*/, &sb, &sl) == 0) { fput(fd, " sndbuf="); fnum(fd, (u64)sb); }
+    fput(fd, "\n  ");
+    fproc(fd, "wmem_default=", "/proc/sys/net/core/wmem_default", 32, 0);
+    fproc(fd, "wmem_max=", "/proc/sys/net/core/wmem_max", 32, 0);
+    fproc(fd, "optmem_max=", "/proc/sys/net/core/optmem_max", 32, 0);
+    fput(fd, "\n");
+    fproc(fd, "", "/proc/meminfo", 100, 1);            // MemTotal / MemFree / MemAvailable
+    fput(fd, "\n");
+    S1(NR_close, fd);
+}
+// A guest sendmsg whose msg_controllen is garbage is refused by the kernel with -ENOBUFS for good (controllen > optmem_max,
+// checked before anything is read), no matter how often or how patiently it is retried. The 00:03 boot log: system_server's
+// getAbiList write to the secondary zygote, iovlen=1 bytes=19, controllen=0x7c00000010: the low half (16 = CMSG_SPACE(0), the
+// size of the unused cmsg buffer of LocalSocketImpl's socket_write_all) is what the guest meant, the high half is the top of
+// a stack pointer left in the 64-bit field. Every send of that kind failed, ConnectException from the zygote connection,
+// no app process ever started and the boot stalled for ever. A message with no control buffer carries no control data, and a
+// control length that does not fit 32 bits is its low half: send a corrected copy (the guest's own header is left as it was).
+static void msgh_fix(struct msgh *out, const struct msgh *in) {
+    *out = *in;
+    if (!out->control) out->controllen = 0;
+    else if (out->controllen >> 32) out->controllen &= 0xffffffffUL;
+}
+static long send_retry(long nr, const long *a0) {
+    long r, a[6];
+    struct msgh fixed;
+    for (int k = 0; k < 6; k++) a[k] = a0[k];
+    if (nr == NR_sendmsg && a[1]) {
+        const struct msgh *m = (const struct msgh *)a[1];
+        if (m->controllen && (!m->control || (m->controllen >> 32))) { msgh_fix(&fixed, m); a[1] = (long)&fixed; }
+    }
+    for (int i = 0;; i++) {
+        r = nr == NR_sendmsg ? S3(nr, a[0], a[1], a[2]) : S6(nr, a[0], a[1], a[2], a[3], a[4], a[5]);
+        if (r != -ENOBUFS || i >= 100) return r;
+        if (i == 0) {
+            int sz = 1 << 20;
+            enobufs_note(nr, a);
+            S5(NR_setsockopt, a[0], 1 /*SOL_SOCKET*/, 7 /*SO_SNDBUF*/, &sz, 4);
+        }
+        struct { long s, ns; } ts = { 0, 5000000 };      // 5 ms
+        S2(NR_nanosleep, &ts, 0);
+    }
+}
 
 static long trap2(long nr, long *a, void *uc, char **pbp) {
     int err = 0;
@@ -901,6 +983,7 @@ static long trap2(long nr, long *a, void *uc, char **pbp) {
     }
     case NR_bind: case NR_connect:
         if (is_nl_fd((int)a[0])) return 0;
+        if (nr == NR_connect) { long hr = nh_connect(a[0], (const void *)a[1], (u64)a[2]); if (hr != NH_PASS) return hr; }   // HTTP debugger
         if (a[1] && *(u16 *)a[1] == 16) {           // a real netlink socket: binding to groups is not for an app
             long r = S3(nr, a[0], a[1], a[2]);
             return r < 0 && nr == NR_bind ? 0 : r;
@@ -1078,7 +1161,8 @@ static long trap2(long nr, long *a, void *uc, char **pbp) {
             nl_handle_send((int)a[0], (const void *)a[1], (u64)a[2]);
             return a[2];
         }
-        return S6(nr, a[0], a[1], a[2], a[3], a[4], a[5]);
+        { long hr = nh_sendto(a); if (hr != NH_PASS) return hr; }   // HTTP debugger: DNS
+        return send_retry(nr, a);
     }
     case NR_sendmsg: {
         if (is_nl_fd((int)a[0])) {
@@ -1091,7 +1175,7 @@ static long trap2(long nr, long *a, void *uc, char **pbp) {
             }
             return 0;
         }
-        return S3(nr, a[0], a[1], a[2]);
+        return send_retry(nr, a);
     }
     case NR_rt_sigaction: {
         struct ksa { void *h; u64 flags; void *restorer; u64 mask; } t;
@@ -1387,6 +1471,7 @@ void aemu_main(u64 *sp) {
     if ((r = env_get(envp, "AEMU64_INPUT")) && slen(r) < sizeof g_input) memcpy(g_input, r, slen(r) + 1);
     if ((r = env_get(envp, "AEMU64_PAD")) && slen(r) < sizeof g_pad) memcpy(g_pad, r, slen(r) + 1);
     if ((r = env_get(envp, "AEMU64_KBD")) && slen(r) < sizeof g_kbd) memcpy(g_kbd, r, slen(r) + 1);
+    nh_set_env(env_get(envp, "AEMU64_NETDBG"), env_get(envp, "AEMU64_NETDNS"));
     if ((r = env_get(envp, "AEMU64_SDCARD")) && slen(r) < sizeof g_sd) { g_sdlen = slen(r); memcpy(g_sd, r, g_sdlen + 1); }
     if ((r = env_get(envp, "AEMU64_QEMU")) && slen(r) < sizeof g_qemu) memcpy(g_qemu, r, slen(r) + 1);
     if ((r = env_get(envp, "AEMU64_QEMU64")) && slen(r) < sizeof g_qemu64) memcpy(g_qemu64, r, slen(r) + 1);

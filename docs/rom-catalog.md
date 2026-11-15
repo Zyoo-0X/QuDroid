@@ -1,49 +1,109 @@
-# Sunset ROM catalog
+# ROM catalog
 
-Open **ROM catalog** using the list icon on the library screen or its row in app
-settings. Sections appear as a compact index: tap a section to show only its
-ROMs, and use the toolbar back arrow or system Back to return to the index.
-Each ROM with a URL has a download icon that opens the default browser. There
-is no button to open the raw `rom.list` file. The pencil button changes the `rom.list` URL; the default is
-`https://dumpster.ralsei.tech/drel/AESSRomCatalog/rom.list`. The address is saved
-per app variant. Refresh reloads the catalog. HTTP sources are supported, but
-HTTPS is recommended; HTTPS redirects cannot silently downgrade to HTTP.
+Open **ROM catalog** using the list icon on the library screen, its row in the
+add menu, or its row in app settings. The catalog is a list of ROM download
+links maintained on a server; no ROM is bundled in the app.
 
-UTF-8 format (LF or CRLF, optional BOM):
+The catalog source is **fixed in the app**. It cannot be changed, and its
+address is not shown anywhere in the UI. (Earlier versions had a pencil button
+to change the URL; it was removed, and a custom address saved by an older
+version is ignored.) The toolbar has two buttons: **Submit a ROM** (plus icon)
+and **Refresh**.
 
-```
-#Message of the day shown at the top
-[Section name];Optional comment;https://example.org/source
-Device name;Android version;Skin;1;Optional status comment;https://example.org/rom.zip
-[Empty section];;
-Device without link;4.4.2;Xperia UI;-1;;
-```
+## Browsing
 
-Status: `-1` unknown, `0` does not boot, `1` boots with issues, `2` works.
-Statuses are reports from the catalog, not compatibility checks performed by
-the app. Multiple leading `#` lines form the MOTD. Later `#` lines are comments.
-Blank fields retain their position. Fields are not CSV-quoted; use semicolons
-only as separators, except that the final URL can itself contain semicolons.
+Sections appear as a compact index, one per variant, in the order the server
+sends them. Tap a section to show only its ROMs, and use the toolbar back arrow
+or system Back to return to the index. Each section shows how many ROMs it has;
+an empty section shows **No ROMs at the moment.**
 
-Empty sections remain visible with **No ROMs at the moment.** Missing download
-URLs show **ROM download URL isn't available right now.** Invalid non-web URLs
-are not opened. Malformed records are reported by line number without hiding
-valid entries. Downloads and section-source links open in the default browser,
-not in an embedded web view or through an automatic importer. If no default
-browser is set, Android offers browser selection.
+Each ROM card shows:
 
-The list fetch is bounded to 1 MiB, 10000 lines, five redirects and socket
-timeouts. A failed refresh leaves the last successfully displayed list visible
-with an error; changing the source clears the old list. There is no persistent
-offline catalog cache.
+- the ROM name and the device;
+- the ROM version and version category;
+- the file size and the emulator version it was tested on (when given);
+- notes (when given);
+- who submitted it.
+
+A ROM with a download link has a download icon. A ROM without a usable link
+shows **ROM download URL isn't available right now.** Entries that are malformed
+(no name or device, or a link that is not a plain `http(s)` link) are reported
+by entry number in a warning line without hiding the valid ones.
+
+## Downloading
+
+The download icon first checks the link:
+
+- If it answers with a file (zip, rar, 7z, tar, gz, img, `.aessvm` and similar
+  archive or image types, or an attachment), the file is downloaded into the
+  app's `downloads` folder and handed straight to the importer on the home
+  screen. Files of 16 MiB or more use up to 6 parallel connections in 8 MiB
+  chunks when the server supports byte ranges. The dialog shows the file name,
+  size and speed, and **Cancel** stops the download. Leftover downloads older
+  than 24 hours are removed.
+- If it answers with a web page (HTML, text, JSON, XML), an HTTP error, or the
+  check cannot be completed, the link opens in the default browser instead. If
+  no default browser is set, Android offers a browser selection.
+
+Links containing a user name or password, and non-web schemes, are never opened.
+HTTPS redirects cannot silently downgrade to HTTP.
+
+## Submitting a ROM
+
+The plus button opens a form to share a ROM download link. Submissions are
+reviewed before they appear in the catalog. The categories (variants and
+version categories) come from the server.
+
+| Field | Required | Limit |
+| --- | --- | --- |
+| Variant, Version category | yes | chosen from the server list |
+| ROM name | yes | 120 characters |
+| ROM version | yes | 60 characters |
+| Device | yes | 120 characters |
+| Download URL | yes | 2048 characters, `http(s)` only |
+| Your name | yes | 60 characters |
+| File size in MB | no | a number, 0 or more |
+| Emulator version | no | 40 characters |
+| Notes | no | 1000 characters |
+
+The server can answer that the link was already submitted, that too many
+submissions were made (the app shows roughly how many minutes to wait), or that
+the submission was rejected with a reason. A thank-you message is shown when it
+is accepted.
+
+## Server API
+
+The app talks to one server, with these endpoints:
+
+| Endpoint | Used for |
+| --- | --- |
+| `GET /api/roms` | the catalog: `{"roms":[{variant, version_category, name, rom_version, device, submitted_by, download_url, file_size_bytes, emulator_version, notes}]}` |
+| `GET /api/categories` | the variants and version categories for the submit form |
+| `POST /api/submit` | a new submission (HTTP 201 when accepted, 400 / 409 / 429 on errors) |
+
+Limits on the app side: a catalog response is bounded to 1 MiB and 10000 ROMs,
+with at most five redirects, 15 second connection and read timeouts, and an
+HTML response is rejected as not a catalog. A failed refresh leaves the last
+successfully displayed list visible with an error and a **Retry** button. There
+is no persistent offline cache.
+
+The parser also still understands the older plain-text `rom.list` format
+(status `-1` unknown, `0` does not boot, `1` boots with issues, `2` works), but
+since the source is fixed to the server above it is only used if the server
+itself ever returns that format.
+
+For developers: the source address is the constant `CatalogUrls.DEFAULT` in
+`app/src/main/java/app/aemu/catalog/RomCatalog.kt`. Changing where the catalog
+comes from is a code change, not a setting.
 
 ## Experimental unlock
 
 Tap the **AEmulator Sunset** title 42 times on the library screen or app-settings
-about card. Both titles share a counter that survives rotation and app restarts. At tap 42, the app saves the
-experimental-feature unlock, shows a translated toast, and opens
-`https://www.youtube.com/watch?v=LVHBcsiZcyI` in the browser. Further taps do not
-reopen the video. Unlocking does not turn experimental features on by itself.
+about card. Both titles share a counter that survives rotation and app restarts.
+At tap 42, the app saves the experimental-feature unlock, shows a translated
+toast, and opens `https://www.youtube.com/watch?v=LVHBcsiZcyI` in the browser.
+Further taps do not reopen the video. Unlocking does not turn experimental
+features on by itself.
 
 Currently this reveals the **Host camera (experimental)** setting. A ROM with
 the camera already enabled keeps its setting available; updating does not

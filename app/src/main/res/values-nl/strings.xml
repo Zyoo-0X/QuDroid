@@ -526,4 +526,12 @@
     <string name="phantom_open_dev">Ontwikkelaarsopties openen</string>
     <string name="phantom_ignore">Negeren</string>
     <string name="phantom_never">Niet meer herinneren</string>
+    <string name="vs_netdebug">HTTP-debugger</string>
+    <string name="vs_netdebug_sub">Logt de HTTP- en HTTPS-verzoeken van de gast en kan ze beantwoorden of wijzigen (menu › HTTP-debugger). Plaatst een debug-CA in de vertrouwensopslag van de gast. Geldt vanaf de volgende volledige start.</string>
+    <string name="m_netdebug">HTTP-debugger</string>
+    <string name="vs_skip_perm_wait">Wachten op de machtigingscontroller overslaan (Android 10-13)</string>
+    <string name="vs_skip_perm_wait_sub">Voor x86-firmware op een ARM-telefoon, waar de machtigingscontroller-app te traag is om binnen 60 s te antwoorden en system_server wordt beëindigd (\"Error granting/upgrading runtime permissions\"). Past de services.jar van de firmware aan zodat het opstarten niet wacht op de standaard runtimemachtigingen; vooraf geïnstalleerde apps krijgen die machtigingen dan niet bij het opstarten. dex2oat wordt verhinderd de aangepaste jar opnieuw te compileren. Uitschakelen herstelt de originele jar. Gaat in bij de volgende volledige start.</string>
+    <string name="catalog_download_checking">Link controleren…</string>
+    <string name="catalog_download_title">ROM downloaden</string>
+    <string name="catalog_download_failed">Downloaden mislukt: %1$s</string>
 </resources>

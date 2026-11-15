@@ -14,7 +14,8 @@ class GuestRunner(
     val img: GuestImage,
     val net: NetConfig = NetConfig(),
 ) {
-    data class NetConfig(val http80: Int = 0, val https443: Int = 0, val dns53: Int = 0, val glPath: String? = null)
+    /** [netDbg]/[netDns]: the HTTP debugger's header door and DNS port for the native engine (AEMU64_NETDBG / AEMU64_NETDNS) */
+    data class NetConfig(val http80: Int = 0, val https443: Int = 0, val dns53: Int = 0, val glPath: String? = null, val netDbg: Int = 0, val netDns: Int = 0)
 
     var qemuLog = false
     var qemuStrace = false
@@ -32,6 +33,12 @@ class GuestRunner(
     private val userTokens: List<String> get() = Regex("""("[^"]*"|\S+)""").findAll(userQemuArgs).map { it.value.trim('"') }.toList()
     private fun isEnvToken(t: String) = !t.startsWith("-") && Regex("^[A-Z_][A-Z0-9_]*=").containsMatchIn(t)
 
+    /**
+     * Added for AEmulator Plus (2026-11-15): a pre-1.0 tree whose runtime is to start JamVM (runtime.vm=jam, class-file jars,
+     * see LegacyFirmware.runtimeVm). The runtime reads ANDROIDVM before it asks the property service.
+     */
+    private val jamVm: Boolean by lazy { LegacyFirmware.usesJamVm(paths.root) }
+
     val engine: Engine get() = img.engine
     /** instruction set of the guest's programs: picks the translator, the preload set and whether DHD_NO_SMC may be sent */
     val arch: GuestArch get() = img.arch
@@ -42,6 +49,8 @@ class GuestRunner(
         else if (arch != GuestArch.ARM) arch.translator(engine)
         // pre-1.0 images only: the translator with read-implies-exec (see LegacyFirmware.PRE_RELEASE_TRANSLATOR)
         else if (LegacyFirmware.isPreRelease(img.release) && paths.nativeBin(LegacyFirmware.PRE_RELEASE_TRANSLATOR).canExecute()) LegacyFirmware.PRE_RELEASE_TRANSLATOR
+        // Android 1.0 / 1.1: the translator whose fb0 reports a second page (see LegacyFirmware.API1_TRANSLATOR)
+        else if (img.api in 1..2 && engine == Engine.KK && paths.nativeBin(LegacyFirmware.API1_TRANSLATOR).canExecute()) LegacyFirmware.API1_TRANSLATOR
         else if (QemuFallback.enabled(paths) && paths.nativeBin(engine.qemuXperiaPlay).canExecute()) engine.qemuXperiaPlay else engine.qemu)
     val runner: File get() = paths.nativeBin(engine.runner)
 
@@ -139,6 +148,8 @@ class GuestRunner(
             e["AEMU_GL_RETARGET"] = "0"; e["AEMU_GL_CLIENT_ARRAYS"] = "0"      // as on the 4.4 engine for 4.3+
         }
         e["AEMU64_FB"] = "${img.settings.width}x${img.settings.height}"
+        if (net.netDbg > 0) e["AEMU64_NETDBG"] = net.netDbg.toString()
+        if (net.netDns > 0) e["AEMU64_NETDNS"] = net.netDns.toString()
         // Modified for AEmulator Plus (2026-10-28): uname -r. The native engine never set QEMU_UNAME (only env() did), so the
         // guest saw the phone's own kernel even with the firmware's version imported from boot.img. A 32-bit-only Android 14
         // firmware's netd refuses a 32-bit userspace on Linux >= 6.2 ("libnetd_updatable_init: Failed: 32 bit userspace with
@@ -227,6 +238,7 @@ class GuestRunner(
         e["ANDROID_DATA"] = img.exports["ANDROID_DATA"] ?: "/data"
         e["ANDROID_ASSETS"] = img.exports["ANDROID_ASSETS"] ?: "/system/app"
         e["EXTERNAL_STORAGE"] = img.exports["EXTERNAL_STORAGE"] ?: img.sdcardPath
+        if (jamVm) e[LegacyFirmware.VM_ENV] = LegacyFirmware.VM_JAM
         e["ASEC_MOUNTPOINT"] = img.exports["ASEC_MOUNTPOINT"] ?: "/mnt/asec"
         e["LOOP_MOUNTPOINT"] = img.exports["LOOP_MOUNTPOINT"] ?: "/mnt/obb"
         // Modified for AEmulator Plus (2026-11-06): jars the firmware's own libandroid_runtime registers classes from, but its init.rc leaves out (see BootClasspathRepair)

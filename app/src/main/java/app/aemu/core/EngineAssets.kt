@@ -84,6 +84,27 @@ object EngineAssets {
 
     fun exists(ctx: Context, path: String): Boolean = load(ctx).containsKey(path)
 
+    /** Added for AEmulator Plus (2026-11-14): the x86-64 build of the GPU bridge (native/glbridge/build64-x86_64.sh); installed with the other common-x86_64 files */
+    const val X86_64_GPU_BRIDGE = "engines/common-x86_64/system#lib64#egl#libGLES_aemu.so"
+
+    /**
+     * The engine's own x86-64 builds, split like the native engine's layers (modified for AEmulator Plus, 2026-11-14; they
+     * all used to sit in engines/n64-x86_64): engines/common-x86_64 holds what does not depend on the Android release, and
+     * engines/n64-<api>/x86_64 what is built for one release only (n64-30/x86_64: the audio HAL stack of android11-release),
+     * in analogy to engines/n64-<api>/arm32. Later wins. The audio stack is also what an Android 10 guest (API 29) gets, so
+     * n64-30/x86_64 is a layer of the API 29 kernel as well.
+     */
+    fun x86_64Dirs(tag: String, api: Int): List<String> =
+        listOf("engines/common-x86_64", "engines/n64-$tag/x86_64") + (if (api == 29 && tag != "30") listOf("engines/n64-30/x86_64") else emptyList())
+
+    /** file name to asset path of the x86-64 engine files for a guest of this kernel; only the "a#b#c" guest files (common-x86_64 also holds libc_scudo_stub.so, which core/ScudoStub.kt installs) */
+    fun x86_64Files(ctx: Context, tag: String, api: Int): Map<String, String> {
+        load(ctx)
+        val out = LinkedHashMap<String, String>()
+        for (d in x86_64Dirs(tag, api)) for (n in dirs?.get(d).orEmpty()) if ('#' in n) out[n] = "$d/$n"
+        return out
+    }
+
     /**
      * Guest-side helper files per guest architecture. The directories above hold ARM builds. For an x86 guest the same
      * file lives in a sibling directory with the architecture's suffix (engines/kk -> engines/kk-x86, engines/common ->

@@ -525,4 +525,12 @@
     <string name="phantom_open_dev">Åbn Udviklerindstillinger</string>
     <string name="phantom_ignore">Ignorér</string>
     <string name="phantom_never">Påmind aldrig igen</string>
+    <string name="vs_netdebug">HTTP-debugger</string>
+    <string name="vs_netdebug_sub">Logger gæstens HTTP- og HTTPS-forespørgsler og kan besvare eller ændre dem (menu › HTTP-debugger). Lægger en fejlfindings-CA i gæstens tillidslager. Gælder ved næste fulde start.</string>
+    <string name="m_netdebug">HTTP-debugger</string>
+    <string name="vs_skip_perm_wait">Spring ventetiden på tilladelseskontrolleren over (Android 10-13)</string>
+    <string name="vs_skip_perm_wait_sub">Til x86-firmware på en ARM-telefon, hvor tilladelseskontrollerens app er for langsom til at svare inden for 60 s, og system_server bliver lukket ned (\"Error granting/upgrading runtime permissions\"). Patcher firmwarens services.jar, så opstarten ikke venter på standardtilladelserne under kørsel; forudinstallerede apps får så ikke disse tilladelser ved opstart. dex2oat forhindres i at kompilere den patchede jar igen. Slås det fra, genskabes den originale jar. Træder i kraft ved næste fulde opstart.</string>
+    <string name="catalog_download_checking">Tjekker link…</string>
+    <string name="catalog_download_title">Henter ROM</string>
+    <string name="catalog_download_failed">Download mislykkedes: %1$s</string>
 </resources>

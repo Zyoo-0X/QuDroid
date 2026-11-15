@@ -527,4 +527,12 @@
     <string name="phantom_open_dev">Atvērt izstrādātāju opcijas</string>
     <string name="phantom_ignore">Ignorēt</string>
     <string name="phantom_never">Vairs nepatādināt</string>
+    <string name="vs_netdebug">HTTP atkļūdotājs</string>
+    <string name="vs_netdebug_sub">Reģistrē viesa HTTP un HTTPS pieprasījumus un var uz tiem atbildēt vai tos mainīt (izvēlne › HTTP atkļūdotājs). Ievieto atkļūdošanas CA viesa uzticamības krātuvē. Stājas spēkā nākamajā pilnajā startēšanā.</string>
+    <string name="m_netdebug">HTTP atkļūdotājs</string>
+    <string name="vs_skip_perm_wait">Izlaist gaidīšanu uz atļauju kontrolieri (Android 10–13)</string>
+    <string name="vs_skip_perm_wait_sub">x86 programmaparatūrai ARM tālrunī, kad atļauju kontroliera lietotne ir pārāk lēna, lai atbildētu 60 s laikā, un system_server tiek apturēts (“Error granting/upgrading runtime permissions”). Ielāpo programmaparatūras services.jar, lai sāknēšana negaidītu noklusējuma izpildlaika atļauju piešķiršanu; iepriekš instalētās lietotnes šīs atļaujas sāknēšanas laikā tad nesaņem. dex2oat tiek liegts atkārtoti kompilēt ielāpoto jar. Izslēdzot tiek atjaunots oriģinālais jar. Stājas spēkā nākamajā pilnajā sāknēšanā.</string>
+    <string name="catalog_download_checking">Pārbauda saiti…</string>
+    <string name="catalog_download_title">Lejupielādē ROM</string>
+    <string name="catalog_download_failed">Lejupielāde neizdevās: %1$s</string>
 </resources>

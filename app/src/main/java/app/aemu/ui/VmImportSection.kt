@@ -1,9 +1,10 @@
 /* AEmulator Sunset addition, 2026-10-03. GPL-3.0; see LICENSE. */
 package app.aemu.ui
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import android.net.Uri
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -19,7 +20,6 @@ import kotlinx.coroutines.withContext
 internal fun VmImportSection(img: GuestImage, busy: Boolean, setBusy: (Boolean) -> Unit, apply: (VmSettings) -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    var bootPresent by remember { mutableStateOf(BootPartitionImport.present(VmPaths(ctx, img.id).dir)) }
     var warning by remember { mutableStateOf<VmArchiveStorage.SettingsImport?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
     var picking by remember { mutableStateOf(false) }
@@ -27,7 +27,7 @@ internal fun VmImportSection(img: GuestImage, busy: Boolean, setBusy: (Boolean) 
         apply(source.image.settings)
         message = ctx.getString(R.string.vm_import_settings_done)
     }
-    val pickSettings = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    val pickSettings = rememberSingleFilePicker { uri ->
         picking = false
         if (uri != null) {
             setBusy(true)
@@ -42,26 +42,9 @@ internal fun VmImportSection(img: GuestImage, busy: Boolean, setBusy: (Boolean) 
             }
         }
     }
-    val pickBoot = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        picking = false
-        if (uri != null) {
-            setBusy(true)
-            message = ctx.getString(R.string.vm_import_boot_working)
-            scope.launch {
-                val result = withContext(Dispatchers.IO) { runCatching { BootPartitionImport.install(ctx, img.id, uri) } }
-                bootPresent = BootPartitionImport.present(VmPaths(ctx, img.id).dir)
-                setBusy(false)
-                message = result.fold({ ctx.getString(R.string.vm_import_boot_done) },
-                    { ctx.getString(R.string.vm_import_failed, it.userMessage(ctx)) })
-            }
-        }
-    }
     TextButton(enabled = !busy && !picking, modifier = Modifier.fillMaxWidth(), onClick = {
         picking = true; pickSettings.launch(arrayOf("*/*"))
     }) { Text(stringResource(R.string.vm_import_settings)) }
-    if (!bootPresent) TextButton(enabled = !busy && !picking, modifier = Modifier.fillMaxWidth(), onClick = {
-        picking = true; pickBoot.launch(arrayOf("*/*"))
-    }) { Text(stringResource(R.string.vm_import_boot)) }
     message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
     warning?.let { source -> AlertDialog(
         onDismissRequest = { warning = null },
@@ -74,32 +57,75 @@ internal fun VmImportSection(img: GuestImage, busy: Boolean, setBusy: (Boolean) 
     ) }
 }
 
-/** Import of the stock OEM partition; shown next to the recovery option in the VM settings. */
+/**
+ * "Import partition" as a block of its own (title, description, button), shown next to the delta OTA one: boot, recovery,
+ * OEM, vendor, odm, product, system_ext or a skin partition. The kind comes from the file; the person is asked when it does not say.
+ */
 @Composable
-internal fun OemImportSection(img: GuestImage, busy: Boolean, setBusy: (Boolean) -> Unit) {
+internal fun PartitionImportSection(img: GuestImage, busy: Boolean, setBusy: (Boolean) -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    var oemPresent by remember { mutableStateOf(OemPartitionImport.present(VmPaths(ctx, img.id).dir)) }
     var message by remember { mutableStateOf<String?>(null) }
     var picking by remember { mutableStateOf(false) }
-    val pickOem = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        picking = false
-        if (uri != null) {
-            setBusy(true)
-            message = ctx.getString(R.string.vm_import_oem_working)
-            scope.launch {
-                val result = withContext(Dispatchers.IO) { runCatching { OemPartitionImport.install(ctx, img.id, uri) } }
-                oemPresent = OemPartitionImport.present(VmPaths(ctx, img.id).dir)
-                setBusy(false)
-                message = result.fold({ ctx.getString(R.string.vm_import_oem_done) },
-                    { ctx.getString(R.string.vm_import_failed, it.userMessage(ctx)) })
-            }
+    var pendingPartition by remember { mutableStateOf<Uri?>(null) }   // a file that has to be told which partition it is
+    fun startPartition(uri: Uri, kind: String) {
+        val label = PartitionImport.label(kind)
+        if (kind in PartitionImport.UNSUPPORTED) { message = ctx.getString(R.string.vm_import_partition_unsupported, label); return }
+        setBusy(true)
+        message = ctx.getString(R.string.vm_import_partition_working, label)
+        scope.launch {
+            val result = withContext(Dispatchers.IO) { runCatching { PartitionImport.install(ctx, img.id, uri, kind) } }
+            setBusy(false)
+            message = result.fold({
+                when (kind) {
+                    PartitionImport.BOOT -> ctx.getString(R.string.vm_import_boot_done)
+                    PartitionImport.RECOVERY -> ctx.getString(R.string.vm_import_recovery_done)
+                    else -> ctx.getString(R.string.vm_import_partition_done, label)
+                }
+            }, { ctx.getString(R.string.vm_import_failed, it.userMessage(ctx)) })
         }
     }
-    if (!oemPresent) TextButton(enabled = !busy && !picking, modifier = Modifier.fillMaxWidth(), onClick = {
-        picking = true; pickOem.launch(arrayOf("*/*"))
-    }) { Text(stringResource(R.string.vm_import_oem)) }
-    message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+    val pickPartition = rememberSingleFilePicker { uri ->
+        picking = false
+        if (uri != null) scope.launch {
+            val kind = withContext(Dispatchers.IO) { runCatching { PartitionImport.detect(ctx, uri) } }
+            kind.onSuccess { if (it != null) { startPartition(uri, it) } else { pendingPartition = uri } }
+                .onFailure { message = ctx.getString(R.string.vm_import_failed, it.userMessage(ctx)) }
+        }
+    }
+    Text(stringResource(R.string.vm_import_partition), style = MaterialTheme.typography.titleMedium, modifier = Modifier.fillMaxWidth())
+    ListItem(
+        modifier = Modifier.fillMaxWidth(),
+        headlineContent = { Text(stringResource(R.string.vm_import_partition_headline)) },
+        supportingContent = { Text(message ?: stringResource(R.string.vm_import_partition_sub)) },
+        trailingContent = {
+            TextButton(enabled = !busy && !picking, onClick = { picking = true; pickPartition.launch(arrayOf("*/*")) }) {
+                Text(stringResource(R.string.vm_import_partition_button))
+            }
+        },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+    )
+    pendingPartition?.let { uri ->
+        val dir = remember(uri) { VmPaths(ctx, img.id).dir }
+        AlertDialog(
+            onDismissRequest = { pendingPartition = null },
+            title = { Text(stringResource(R.string.vm_import_partition_which)) },
+            text = {
+                Column {
+                    Text(stringResource(R.string.vm_import_partition_which_info))
+                    for (kind in PartitionImport.CHOICES) {
+                        val have = PartitionImport.present(dir, kind) && !PartitionImport.replaceable(kind)
+                        val label = PartitionImport.label(kind)
+                        TextButton(enabled = !have, modifier = Modifier.fillMaxWidth(), onClick = { pendingPartition = null; startPartition(uri, kind) }) {
+                            Text(if (have) stringResource(R.string.vm_import_partition_have, label) else label)
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { pendingPartition = null }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
 }
 
 /** Samsung only: import of the CSC package (carrier / country defaults in /system/csc), next to the OEM option. */
@@ -112,7 +138,7 @@ internal fun CscImportSection(img: GuestImage, busy: Boolean, setBusy: (Boolean)
     var present by remember { mutableStateOf(CscImport.present(root)) }
     var message by remember { mutableStateOf<String?>(null) }
     var picking by remember { mutableStateOf(false) }
-    val pickCsc = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    val pickCsc = rememberSingleFilePicker { uri ->
         picking = false
         if (uri != null) {
             setBusy(true)

@@ -8,4 +8,12 @@
     <string name="tab_minimize">Minimiraj</string>
     <string name="tab_shutdown">Izklopi</string>
     <string name="vm_slots_full">Vseh %1$d mest za stroje je zasedenih. Najprej izklopite enega.</string>
+    <string name="tab_group_title">2 zavihka</string>
+    <string name="tab_split_failed">Tega stroja ni več mogoče dodati temu zavihku.</string>
+    <string name="tab_drag_label">Povlecite na zaslon za razdelitev</string>
+    <string name="tab_split_title">Razdeliti 2 zavihka?</string>
+    <string name="tab_split_text">Vsak stroj se vrne na svoj zavihek. Oba še naprej delujeta.</string>
+    <string name="tab_split_action">Razdeli</string>
+    <string name="tab_bar_hide">Skrij vrstico zavihkov</string>
+    <string name="tab_bar_show">Pokaži vrstico zavihkov</string>
 </resources>

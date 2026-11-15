@@ -232,4 +232,7 @@
     <string name="imp_choice_text">May higit sa isang %1$s ang package na ito (%2$d sa %3$d). Piliin ang iimport.</string>
     <string name="imp_choice_ok">I-import</string>
     <string name="imp_choice_cancel">Kanselahin ang pag-import</string>
+    <string name="ota_squash_files_modified">%1$d file sa /system ang binago ng app o ng iyo at hindi na mabubuo muli, hal. %2$s. Mabubuo lang muli ang SquashFS system image mula sa mga hindi binagong file. Walang binago.</string>
+    <string name="imp_unreadable_mbr">%1$s: hindi mabasang MBR partition table</string>
+    <string name="imp_no_system_partition_in_mbr">%1$s: walang system partition sa MBR</string>
 </resources>

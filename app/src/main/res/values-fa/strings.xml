@@ -525,4 +525,12 @@
     <string name="phantom_open_dev">باز کردن گزینه‌های توسعه‌دهنده</string>
     <string name="phantom_ignore">نادیده گرفتن</string>
     <string name="phantom_never">دیگر یادآوری نکن</string>
+    <string name="vs_netdebug">اشکالزدای HTTP</string>
+    <string name="vs_netdebug_sub">درخواستهای HTTP و HTTPS مهمان را ثبت میکند و میتواند به آنها پاسخ دهد یا آنها را تغییر دهد (منو › اشکالزدای HTTP). یک CA اشکالزدایی را به مخزن اعتماد مهمان اضافه میکند. از راهاندازی کامل بعدی اعمال میشود.</string>
+    <string name="m_netdebug">اشکالزدای HTTP</string>
+    <string name="vs_skip_perm_wait">رد کردن انتظار برای کنترلکنندهٔ مجوزها (Android 10-13)</string>
+    <string name="vs_skip_perm_wait_sub">برای فریمور x86 روی گوشی ARM، جایی که برنامهٔ کنترلکنندهٔ مجوزها آنقدر کند است که نمیتواند ظرف ۶۰ ثانیه پاسخ دهد و system_server بسته میشود («Error granting/upgrading runtime permissions»). فایل services.jar فریمور را وصله میکند تا راهاندازی منتظر مجوزهای پیشفرض زمان اجرا نماند؛ برنامههای از پیش نصبشده در این صورت آن مجوزها را هنگام بوت دریافت نمیکنند. از کامپایل مجدد jar وصلهشده توسط dex2oat جلوگیری میشود. خاموش کردن، jar اصلی را بازمیگرداند. در بوت کامل بعدی اعمال میشود.</string>
+    <string name="catalog_download_checking">در حال بررسی پیوند…</string>
+    <string name="catalog_download_title">در حال دانلود ROM</string>
+    <string name="catalog_download_failed">دانلود ناموفق بود: %1$s</string>
 </resources>

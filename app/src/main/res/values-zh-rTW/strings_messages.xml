@@ -232,4 +232,7 @@
     <string name="imp_choice_text">此套件含有多個%1$s(第 %2$d 個,共 %3$d 個)。請選擇要匯入的一個。</string>
     <string name="imp_choice_ok">匯入</string>
     <string name="imp_choice_cancel">取消匯入</string>
+    <string name="ota_squash_files_modified">/system 中有 %1$d 個檔案已被應用程式或你修改，無法重新建構，例如 %2$s。SquashFS 系統映像檔只能由未修改的檔案重新建構。未做任何變更。</string>
+    <string name="imp_unreadable_mbr">%1$s：無法讀取 MBR 分割區表</string>
+    <string name="imp_no_system_partition_in_mbr">%1$s：MBR 中沒有系統分割區</string>
 </resources>

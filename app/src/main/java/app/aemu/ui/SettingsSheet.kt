@@ -220,6 +220,7 @@ fun SettingsSheet(img: GuestImage, onDismiss: () -> Unit, onSave: (VmSettings, S
             Toggle(stringResource(R.string.vs_lowram), stringResource(R.string.vs_lowram_sub), s.lowRam) { s = s.copy(lowRam = it) }
             MemoryModePicker(MemoryMode.parse(s.memoryMode)) { s = s.copy(memoryMode = it.id) }
             Toggle(stringResource(R.string.vs_proxy), stringResource(R.string.vs_proxy_sub), s.netProxy) { s = s.copy(netProxy = it) }
+            Toggle(stringResource(R.string.vs_netdebug), stringResource(R.string.vs_netdebug_sub), s.netDebug) { s = s.copy(netDebug = it) }
             Toggle(stringResource(R.string.vs_vibration), stringResource(R.string.vs_vibration_sub), s.vibration) { s = s.copy(vibration = it) }
             Toggle(stringResource(R.string.vs_host_battery), stringResource(R.string.vs_host_battery_sub), s.hostBattery) { s = s.copy(hostBattery = it) }
             if (img.api in 9..25) Toggle(stringResource(R.string.vs_no_sensors), stringResource(R.string.vs_no_sensors_sub), img.sensorsOff(s)) { s = s.copy(disableSensors = it) }
@@ -233,6 +234,7 @@ fun SettingsSheet(img: GuestImage, onDismiss: () -> Unit, onSave: (VmSettings, S
             if (img.api >= 26) Toggle(stringResource(R.string.vs_sf_tombstone), stringResource(R.string.vs_sf_tombstone_sub), s.sfTombstone) { s = s.copy(sfTombstone = it) }
             if (img.api >= 34) Toggle(stringResource(R.string.vs_art_boot_image), stringResource(R.string.vs_art_boot_image_sub), s.useArtBootImage) { s = s.copy(useArtBootImage = it) }
             if (img.api >= 34) Toggle(stringResource(R.string.vs_no_watchdog), stringResource(R.string.vs_no_watchdog_sub), s.disableWatchdog) { s = s.copy(disableWatchdog = it) }
+            if (img.api in 29..33) Toggle(stringResource(R.string.vs_skip_perm_wait), stringResource(R.string.vs_skip_perm_wait_sub), s.skipPermissionWait) { s = s.copy(skipPermissionWait = it) }
             if (wifiOffered) {
                 Toggle(stringResource(R.string.vs_wifi), stringResource(R.string.vs_wifi_sub), s.wifi) { s = s.copy(wifi = it) }
                 if (s.wifi) WifiFields(s) { s = it }
@@ -322,12 +324,13 @@ fun SettingsSheet(img: GuestImage, onDismiss: () -> Unit, onSave: (VmSettings, S
             HardwarePicker(s.hardware) { s = s.copy(hardware = it) }
 
             Spacer(Modifier.height(8.dp))
-            RecoverySection(img)
-            OemImportSection(img, resetting) { resetting = it }
             CscImportSection(img, resetting) { resetting = it }
 
             Spacer(Modifier.height(8.dp))
             OtaSection(img, resetting) { resetting = it }
+
+            Spacer(Modifier.height(8.dp))
+            PartitionImportSection(img, resetting) { resetting = it }
 
             Spacer(Modifier.height(8.dp))
             Text(stringResource(R.string.vs_controls), style = MaterialTheme.typography.titleMedium)
@@ -342,6 +345,7 @@ fun SettingsSheet(img: GuestImage, onDismiss: () -> Unit, onSave: (VmSettings, S
             Spacer(Modifier.height(16.dp))
             VmExportSection(img, s, resetting) { resetting = it }
             VmImportSection(img, resetting, { resetting = it }) { s = it }
+            VmFilesSection(img, resetting)
             TextButton(enabled = !resetting, onClick = { resetConfirm = true }, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.vm_reset_data), color = MaterialTheme.colorScheme.error)
             }
@@ -544,42 +548,6 @@ private fun NumField(label: String, value: Int, modifier: Modifier, set: (Int) -
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
 }
 
-/** Recovery of this firmware: stock one from the import, or a custom recovery.img (TWRP, OrangeFox, CWM…). */
-@Composable
-private fun RecoverySection(img: GuestImage) {
-    val ctx = androidx.compose.ui.platform.LocalContext.current
-    val paths = remember(img.id) { app.aemu.core.VmPaths(ctx, img.id) }
-    var status by remember { mutableStateOf(recoveryStatus(ctx, paths)) }
-    var busy by remember { mutableStateOf(false) }
-    val failed = stringResource(R.string.vs_recovery_failed)
-    val pick = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        busy = true
-        Thread {
-            val ok = runCatching {
-                val data = ctx.contentResolver.openInputStream(uri)!!.use { it.readBytes() }
-                app.aemu.core.RecoveryImage.install(paths, data) {}
-            }.getOrDefault(false)
-            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                busy = false
-                status = recoveryStatus(ctx, paths)
-                if (!ok) android.widget.Toast.makeText(ctx, failed, android.widget.Toast.LENGTH_LONG).show()
-            }
-        }.start()
-    }
-    Text(stringResource(R.string.vs_recovery), style = MaterialTheme.typography.titleMedium)
-    ListItem(
-        headlineContent = { Text(status ?: stringResource(R.string.vs_recovery_none)) },
-        supportingContent = { Text(stringResource(R.string.vs_recovery_sub)) },
-        trailingContent = {
-            TextButton(enabled = !busy, onClick = { pick.launch(arrayOf("*/*")) }) { Text(stringResource(R.string.vs_recovery_install)) }
-        },
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-    )
-}
-
-
 /** Delta (incremental) OTA zips applied on top of this VM's system image. */
 @Composable
 private fun OtaSection(img: GuestImage, busy: Boolean, setBusy: (Boolean) -> Unit) {
@@ -589,10 +557,9 @@ private fun OtaSection(img: GuestImage, busy: Boolean, setBusy: (Boolean) -> Uni
     var message by remember { mutableStateOf<String?>(null) }
     var picking by remember { mutableStateOf(false) }
     androidx.compose.runtime.DisposableEffect(Unit) { onDispose { prepared?.close() } }
-    val pick = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+    val pick = rememberSingleFilePicker { uri ->
         picking = false
-        if (uri == null) return@rememberLauncherForActivityResult
+        if (uri == null) return@rememberSingleFilePicker
         setBusy(true)
         message = ctx.getString(R.string.vs_ota_checking)
         scope.launch {
@@ -643,19 +610,5 @@ private fun OtaSection(img: GuestImage, busy: Boolean, setBusy: (Boolean) -> Uni
                 }
             }) { Text(stringResource(R.string.vs_ota_confirm_ok)) } },
         )
-    }
-}
-
-private fun recoveryStatus(ctx: android.content.Context, paths: app.aemu.core.VmPaths): String? {
-    if (!app.aemu.core.RecoveryImage.installed(paths)) return null
-    val dir = app.aemu.core.RecoveryImage.dir(paths)
-    val prop = runCatching { java.io.File(dir, "default.prop").readText() }.getOrDefault("")
-    val twrp = Regex("""ro\.twrp\.version=(\S+)""").find(prop)?.groupValues?.get(1)
-    return when {
-        twrp != null -> "TWRP $twrp"
-        java.io.File(dir, "twres").isDirectory -> "TWRP"
-        java.io.File(dir, "sbin/orangefox.sh").exists() || prop.contains("orangefox", true) -> "OrangeFox"
-        prop.contains("cwm", true) || java.io.File(dir, "res/images/icon_clockwork.png").exists() -> "ClockworkMod"
-        else -> ctx.getString(R.string.vs_recovery_stock)
     }
 }

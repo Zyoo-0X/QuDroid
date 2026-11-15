@@ -128,6 +128,10 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 
 const val ACTION_BOOT = "app.aemu.BOOT"
 
+/** Intent extras: path of a file to import right away (the catalog download), and whether to delete it afterwards. */
+const val EXTRA_IMPORT = "import"
+const val EXTRA_IMPORT_DELETE = "import_delete"
+
 class MainActivity : ComponentActivity() {
     private val model: LibraryModel by viewModels()
 
@@ -177,9 +181,13 @@ class MainActivity : ComponentActivity() {
                 if (p != null) model.import(android.net.Uri.fromFile(java.io.File(p)))
             }
         }
-        val importPath = i?.getStringExtra("import")
+        val importPath = i?.getStringExtra(EXTRA_IMPORT)
         if (importPath != null) {
-            model.import(android.net.Uri.fromFile(java.io.File(importPath)))
+            val delete = i.getBooleanExtra(EXTRA_IMPORT_DELETE, false)
+            // consumed: a recreated activity (rotation, language change) must not start the same import again
+            i.removeExtra(EXTRA_IMPORT)
+            i.removeExtra(EXTRA_IMPORT_DELETE)
+            model.import(android.net.Uri.fromFile(java.io.File(importPath)), delete)
         }
         // ярлыки и автоматизация: am start -a app.aemu.BOOT --es id <образ>
         if (i?.action == ACTION_BOOT) i.getStringExtra("id")?.let { VmActivity.start(this, it, i.getBooleanExtra("recovery", false)) }
@@ -221,7 +229,8 @@ fun Library(model: LibraryModel) {
             }
         }
     }
-    val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let { model.import(it) } }
+    // built-in browser by default: sorting by date / size, and several files (system + boot, ...) become one machine
+    val pick = rememberFilePicker(multiple = true) { uris -> if (uris.isNotEmpty()) model.import(uris) }
     var settingsFor by remember { mutableStateOf<GuestImage?>(null) }
     var deleteFor by remember { mutableStateOf<GuestImage?>(null) }
     var resetFor by remember { mutableStateOf<GuestImage?>(null) }
@@ -316,7 +325,9 @@ fun Library(model: LibraryModel) {
         },
         floatingActionButton = {
             if (newHome) HomeFab(expanded = addMenu, onToggle = { addMenu = it },
-                onImport = { pick.launch(arrayOf("*/*")) }, onLibrary = { library = true }, onNewFolder = { openNewFolder() })
+                onImport = { pick.launch(arrayOf("*/*")) },
+                onCatalog = { ctx.startActivity(Intent(ctx, RomCatalogActivity::class.java)) },
+                onLibrary = { library = true }, onNewFolder = { openNewFolder() })
             else ExtendedFloatingActionButton(
                 onClick = { if (images.isEmpty()) pick.launch(arrayOf("*/*")) else addMenu = true },
                 icon = { Icon(Icons.Rounded.Add, null) },
@@ -542,6 +553,7 @@ fun Library(model: LibraryModel) {
     if (help) HelpDialog(onDismiss = { help = false })
     if (!newHome && addMenu) AddSheet(images, onDismiss = { addMenu = false },
         onImport = { addMenu = false; pick.launch(arrayOf("*/*")) },
+        onCatalog = { addMenu = false; ctx.startActivity(Intent(ctx, RomCatalogActivity::class.java)) },
         onContainer = { addMenu = false; containerFrom = it },
         onNewFolder = if (view3d) null else ({ addMenu = false; openNewFolder() }))
     if (newHome && library) LibrarySheet(images.filter { it.baseId.isEmpty() }, onDismiss = { library = false },
@@ -569,7 +581,7 @@ fun Library(model: LibraryModel) {
 /** The classic "+" menu: a firmware file, or a new container of a firmware already here. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AddSheet(images: List<GuestImage>, onDismiss: () -> Unit, onImport: () -> Unit, onContainer: (GuestImage) -> Unit, onNewFolder: (() -> Unit)? = null) {
+private fun AddSheet(images: List<GuestImage>, onDismiss: () -> Unit, onImport: () -> Unit, onCatalog: () -> Unit, onContainer: (GuestImage) -> Unit, onNewFolder: (() -> Unit)? = null) {
     // Modified for AEmulator Plus (2026-11-04): "New container" always took images.first(), so a container of any
     // other VM could not be made from this menu. With more than one VM the menu now asks which one to copy.
     var choosing by remember { mutableStateOf(false) }
@@ -592,6 +604,9 @@ private fun AddSheet(images: List<GuestImage>, onDismiss: () -> Unit, onImport: 
                 supportingContent = { Text(stringResource(R.string.add_import_sub)) },
                 leadingContent = { Icon(Icons.Rounded.FileOpen, null) },
                 modifier = Modifier.clip(MaterialTheme.shapes.large).clickable(onClick = onImport))
+            ListItem(headlineContent = { Text(stringResource(R.string.catalog_title)) },
+                leadingContent = { Icon(Icons.Rounded.List, null) },
+                modifier = Modifier.clip(MaterialTheme.shapes.large).clickable(onClick = onCatalog))
             ListItem(headlineContent = { Text(stringResource(R.string.add_container)) },
                 supportingContent = { Text(stringResource(R.string.add_container_sub)) },
                 leadingContent = { Icon(Icons.Rounded.ContentCopy, null) },

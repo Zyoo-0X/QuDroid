@@ -529,4 +529,12 @@
     <string name="phantom_open_dev">Odpri možnosti za razvijalce</string>
     <string name="phantom_ignore">Prezri</string>
     <string name="phantom_never">Ne opominjaj več</string>
+    <string name="vs_netdebug">Razhroščevalnik HTTP</string>
+    <string name="vs_netdebug_sub">Beleži zahteve HTTP in HTTPS gosta ter nanje lahko odgovarja ali jih spreminja (meni › Razhroščevalnik HTTP). V shrambo zaupanja gosta doda razhroščevalni CA. Velja ob naslednjem popolnem zagonu.</string>
+    <string name="m_netdebug">Razhroščevalnik HTTP</string>
+    <string name="vs_skip_perm_wait">Preskoči čakanje na nadzornik dovoljenj (Android 10–13)</string>
+    <string name="vs_skip_perm_wait_sub">Za vdelano programsko opremo x86 na telefonu ARM, kjer je aplikacija nadzornika dovoljenj prepočasna, da bi odgovorila v 60 s, in se system_server konča (»Error granting/upgrading runtime permissions«). Popravi services.jar vdelane programske opreme, da zagon ne čaka na privzeta dovoljenja med izvajanjem; vnaprej nameščene aplikacije teh dovoljenj ob zagonu nato ne dobijo. dex2oat se prepreči, da bi popravljeni jar znova prevedel. Z izklopom se obnovi izvirni jar. Velja ob naslednjem popolnem zagonu.</string>
+    <string name="catalog_download_checking">Preverjanje povezave …</string>
+    <string name="catalog_download_title">Prenašanje ROM-a</string>
+    <string name="catalog_download_failed">Prenos ni uspel: %1$s</string>
 </resources>

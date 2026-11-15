@@ -107,7 +107,7 @@ object DiagExport {
                 vm.paths.bin.listFiles()?.filter { it.isFile }?.sortedBy { it.name }?.forEach { f -> addFile(zip, "run/${f.name}", f) }
                 // fatal-signal reports of the native runner (pc, lr, fault address, registers): where a native service died;
                 // aemu-xattr.log is the runner's debug trace (failing /proc/self path calls, "proc-trace nr=N path ret=-errno")
-                listOf("dev/aemu_crash.log", "dev/.aemu_crash.log", "dev/.aemu-trace.log", "dev/aemu-xattr.log").forEach { rel ->
+                listOf("dev/aemu_crash.log", "dev/.aemu_crash.log", "dev/.aemu-trace.log", "dev/aemu-xattr.log", "dev/aemu-enobufs.log").forEach { rel ->
                     val f = File(vm.paths.root, rel)
                     // Modified for AEmulator Plus (2026-11-11): the syscall trace goes in whole up to 50 MiB (addFile would cut out
                     // the middle, which is where hyos_spawner's lines are); bigger than that it is cut like any big file

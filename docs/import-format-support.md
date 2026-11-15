@@ -36,3 +36,11 @@ bzImage, not stored as `boot.img`, so `/proc/version` keeps its default text.
 Several scripts in the supplied companion archive are standalone desktop tools for vendor-specific or encrypted formats (for example PAC, SBF, NBH, LG BIN, TOT, OFP, and OPS). They depend on Python, external utilities, device/vendor-specific parsing, or decryption keys and have **not** been ported into the Android importer by this change. They are not silently treated as supported. SquashFS and RFS images are converted by the Android importer (see firmware-tools-port.md).
 
 The app build could not be run in this environment because Gradle's distribution download was blocked by unavailable network access; validate with `bash gradlew :app:assembleDebug` in an environment with the configured Gradle distribution and Maven dependencies available.
+
+## SquashFS system partitions and block OTAs
+
+A SquashFS `/system` (for example from a Motorola block OTA) is not kept as a second copy of the image. The importer
+records a layout (`system.squash.layout`): the metadata of the image as it was, the file list with SHA-1s, and for every
+data block a note that it is rebuilt by compressing the file's bytes again. That is checked while the layout is made;
+a block that does not come out identical (another compressor, or another version of zlib/zstd) is stored in the layout
+as it was, so the rebuilt image is always bit-exact. VMs imported earlier keep their `system.base.img` and still work.

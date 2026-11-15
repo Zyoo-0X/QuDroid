@@ -528,4 +528,12 @@
     <string name="phantom_open_dev">Işläp düzüjiniň opsiýalaryny aç</string>
     <string name="phantom_ignore">Üns berme</string>
     <string name="phantom_never">Ýene ýatlatma</string>
+    <string name="vs_netdebug">HTTP düzediji</string>
+    <string name="vs_netdebug_sub">Myhmanyň HTTP we HTTPS haýyşlaryny ýazýar we olara jogap berip ýa-da olary üýtgedip biler (menýu › HTTP düzediji). Myhmanyň ynam ammaryna düzediş CA-syny goýýar. Indiki doly başlatmada ulanylýar.</string>
+    <string name="m_netdebug">HTTP düzediji</string>
+    <string name="vs_skip_perm_wait">Rugsat dolandyryjysyny garaşmagy geç (Android 10–13)</string>
+    <string name="vs_skip_perm_wait_sub">ARM telefonyndaky x86 programma üpjünçiligi üçin: rugsat dolandyryjysy programmasy 60 s içinde jogap bermek üçin gaty haýal bolup, system_server togtadylanda (“Error granting/upgrading runtime permissions”). Programma üpjünçiliginiň services.jar faýlyny ýamaýar, şeýdip ýüklenme adaty işleýiş wagty rugsatlarynyň berilmegine garaşmaýar; öňünden guralan programmalar bu rugsatlary ýüklenmede almaýar. dex2oat ýamalan jar faýlyny gaýtadan kompilirlemekden saklanýar. Öçürmek asyl jar faýlyny dikeldýär. Indiki doly ýüklenmede güýje girýär.</string>
+    <string name="catalog_download_checking">Baglanyşyk barlanýar…</string>
+    <string name="catalog_download_title">ROM ýüklenýär</string>
+    <string name="catalog_download_failed">Ýüklemek şowsuz boldy: %1$s</string>
 </resources>

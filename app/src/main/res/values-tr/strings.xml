@@ -525,4 +525,12 @@
     <string name="phantom_open_dev">Geliştirici seçeneklerini aç</string>
     <string name="phantom_ignore">Yoksay</string>
     <string name="phantom_never">Bir daha hatırlatma</string>
+    <string name="vs_netdebug">HTTP hata ayıklayıcı</string>
+    <string name="vs_netdebug_sub">Konuğun HTTP ve HTTPS isteklerini kaydeder ve bunlara yanıt verebilir veya bunları değiştirebilir (menü › HTTP hata ayıklayıcı). Konuğun güven deposuna bir hata ayıklama CA’sı ekler. Bir sonraki tam başlatmada uygulanır.</string>
+    <string name="m_netdebug">HTTP hata ayıklayıcı</string>
+    <string name="vs_skip_perm_wait">İzin denetleyicisini beklemeyi atla (Android 10-13)</string>
+    <string name="vs_skip_perm_wait_sub">ARM telefondaki x86 aygıt yazılımı için; izin denetleyicisi uygulaması 60 sn içinde yanıt veremeyecek kadar yavaş olduğunda ve system_server sonlandırıldığında (“Error granting/upgrading runtime permissions”). Aygıt yazılımının services.jar dosyasını yamalar; böylece önyükleme varsayılan çalışma zamanı izinlerini beklemez, önceden yüklü uygulamalar da bu izinleri önyüklemede almaz. dex2oat’ın yamalı jar’ı yeniden derlemesi engellenir. Kapatmak orijinal jar’ı geri yükler. Bir sonraki tam önyüklemede etkili olur.</string>
+    <string name="catalog_download_checking">Bağlantı denetleniyor…</string>
+    <string name="catalog_download_title">ROM indiriliyor</string>
+    <string name="catalog_download_failed">İndirme başarısız: %1$s</string>
 </resources>

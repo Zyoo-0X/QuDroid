@@ -20,7 +20,7 @@ object CatalogLoader {
                 connection.connectTimeout = 15_000
                 connection.readTimeout = 15_000
                 connection.instanceFollowRedirects = false
-                connection.setRequestProperty("Accept", "text/plain")
+                connection.setRequestProperty("Accept", "application/json, text/plain")
                 connection.setRequestProperty("User-Agent", "AEmulator-Sunset-RomCatalog")
                 val code = connection.responseCode
                 if (code in listOf(301, 302, 303, 307, 308)) {
@@ -45,7 +45,7 @@ object CatalogLoader {
                     }
                     val text = bytes.toString("UTF-8")
                     if (text.trimStart().startsWith("<")) localizedError("Server returned HTML, not rom.list", R.string.catalog_err_html_not_list)
-                    return@withContext RomCatalogParser.parse(text)
+                    return@withContext if (text.trimStart().startsWith("{")) RomJsonParser.parse(text) else RomCatalogParser.parse(text)
                 }
             } finally { connection.disconnect() }
         }

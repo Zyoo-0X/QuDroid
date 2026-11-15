@@ -187,6 +187,19 @@ static void *need(void *lib, const char *sym) {
     return f;
 }
 
+/* Same, for a symbol whose mangling depends on the word size: configureRpcThreadpool(size_t, bool) is ...Ejb where size_t is
+ * unsigned int (the 32-bit builds) and ...Emb where it is unsigned long (x86-64, arm64). The x86-64 build of this service used to ask
+ * for ...Ejb only: "symbol _ZN7android8hardware22configureRpcThreadpoolEjb not found", exit 1, and SurfaceFlinger had no composer.
+ * The one that matches this build's size_t is tried first; the other is the fallback (no message for the miss). */
+static void *need_sized(void *lib, const char *sym_ulong, const char *sym_uint) {
+    const char *first = sizeof(size_t) == 8 ? sym_ulong : sym_uint;
+    const char *second = sizeof(size_t) == 8 ? sym_uint : sym_ulong;
+    void *f = lib ? dlsym(lib, first) : 0;
+    if (!f && lib) f = dlsym(lib, second);
+    if (!f) ERR("symbols %s / %s not found: %s", first, second, dlerror());
+    return f;
+}
+
 int main() {
     void *iface = dlopen("android.hardware.graphics.composer@2.1.so", RTLD_NOW | RTLD_GLOBAL);
     if (!iface) { ERR("android.hardware.graphics.composer@2.1.so: %s", dlerror()); _exit(1); }   /* not return: bionic's fini array crashes (exit 139) in this crt-less build */
@@ -202,7 +215,8 @@ int main() {
     register_fn register_as_service = (register_fn)need(iface,
         "_ZN7android8hardware8graphics8composer4V2_19IComposer17registerAsServiceERKNSt3__112basic_stringIcNS5_11char_traitsIcEENS5_9allocatorIcEEEE");
     assign_fn assign = (assign_fn)need(cxx, "_ZNSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6assignEPKc");
-    configure_fn configure = (configure_fn)need(ht, "_ZN7android8hardware22configureRpcThreadpoolEjb");
+    configure_fn configure = (configure_fn)need_sized(ht, "_ZN7android8hardware22configureRpcThreadpoolEmb",
+                                                      "_ZN7android8hardware22configureRpcThreadpoolEjb");
     join_fn join = (join_fn)need(ht, "_ZN7android8hardware17joinRpcThreadpoolEv");
     if (!get_service || !register_as_service || !assign || !configure || !join) _exit(1);
 
@@ -255,5 +269,10 @@ __asm__(".text; .arm; .global _start; .type _start,%function; .p2align 2; _start
 #elif defined(__aarch64__)
 __asm__(".text; .global _start; .type _start,%function; _start:"
         "bti j; mov x29,#0; mov x30,#0; mov x0,sp; b _start_main; .size _start, .-_start");
+#elif defined(__x86_64__)
+/* added for AEmulator Plus (2026-11-14), x86-64 guests (native/x86_64/composer): bionic's crtbegin passes the stack pointer, the call
+ * needs it 16-byte aligned */
+__asm__(".text; .global _start; .type _start,@function; _start:"
+        "xorl %ebp,%ebp; movq %rsp,%rdi; andq $-16,%rsp; call _start_main; .size _start, .-_start");
 #endif
 #endif

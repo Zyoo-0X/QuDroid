@@ -58,7 +58,9 @@ class OtaMetadata(
  * An OTA may update several partitions (system, vendor, product, system_ext, odm): each block_image_update is done on
  * the layout recorded for ITS partition ("<partition>.layout"), the files of that partition are brought in line, and
  * all of it is swapped in together or not at all.
- * A SquashFS system cannot be rebuilt from its files: there the image of the full OTA is kept at import ([StockImage]),
+ * A SquashFS system is rebuilt the same way from the layout recorded at import ([SquashLayout]: the metadata of the image,
+ * and for every data block a note that it is compressed again from the file's bytes, checked at import, or the block
+ * itself if it does not come out identical). A VM imported before that keeps the image of the full OTA ([StockImage]),
  * the transfer list runs on a copy of it, and the updated image replaces it, so delta OTAs can be stacked on top of a
  * full block OTA (and of each other) the same way.
  *
@@ -1081,8 +1083,9 @@ object DeltaOta {
     private fun stockBytes(paths: VmPaths, prefix: String, f: SystemLayout.LFile): ByteArray? {
         val gp = "/" + prefix + f.path
         val g = guestFile(paths, gp)
-        // the app keeps the original next to files it rewrites: egl.cfg.rom, audio_policy.conf.rom, libGLES_android.so.sw
-        for (file in listOf(g) + backupFiles(paths, gp) + listOf(File(g.path + ".rom"), File(g.path + ".sw"))) {
+        // the app keeps the original next to files it rewrites: egl.cfg.rom, audio_policy.conf.rom, libGLES_android.so.sw, dex2oat.real
+        // dex2oat is replaced by a wrapper script (Dex2oatArgSplit, Lpw39Dex2oat) that keeps the firmware's binary as dex2oat.real
+        for (file in listOf(g) + backupFiles(paths, gp) + listOf(File(g.path + ".rom"), File(g.path + ".sw"), File(g.path + ".real"))) {
             if (!file.isFile) continue
             val b = file.readBytes()
             if (b.size.toLong() == f.size && sha1(b) == f.sha1) return b
@@ -1167,13 +1170,15 @@ object DeltaOta {
     private fun blockUpdate(paths: VmPaths, zip: ZipFile, plan: Plan, step: BlockStep, staging: File, progress: (Msg) -> Unit): BlockSync =
         when {
             SystemLayout.file(paths.dir, step.partition).isFile -> blockUpdateExt4(paths, zip, plan, step, staging, progress)
+            step.partition == "system" && SquashLayout.file(paths.dir).isFile -> blockUpdateSquashLayout(paths, zip, plan, step, staging, progress)
             step.partition == "system" && StockImage.file(paths.dir).isFile -> blockUpdateSquash(paths, zip, plan, step, staging, progress)
             else -> throw OtaException(noLayout(step.partition))
         }
 
-    /** True if the VM has what a block update of [partition] is made from: its recorded layout (or, for system, the kept SquashFS image). */
+    /** True if the VM has what a block update of [partition] is made from: its recorded layout (or, for system, the SquashFS layout or the kept SquashFS image). */
     private fun hasBase(paths: VmPaths, partition: String) =
-        SystemLayout.file(paths.dir, partition).isFile || (partition == "system" && StockImage.file(paths.dir).isFile)
+        SystemLayout.file(paths.dir, partition).isFile ||
+            (partition == "system" && (SquashLayout.file(paths.dir).isFile || StockImage.file(paths.dir).isFile))
 
     private fun noLayout(partition: String) = if (partition == "system") NO_LAYOUT else
         "This OTA updates the $partition partition as a disk image. The app can only apply that to a VM whose $partition layout it " +
@@ -1390,6 +1395,101 @@ object DeltaOta {
         for (f in oldFiles.keys) if (f !in present || f in newDirs) deletes.add("/system/$f" to false)
         for (l in oldLinks.keys) if (l !in present || l in newDirs) deletes.add("/system/$l" to false)
         return BlockSync(step.partition, staged, deletes, links, dirs, image, base, patched, added)
+    }
+
+    /**
+     * The same for a VM whose /system is SquashFS and that recorded a [SquashLayout] at import: the stock image is
+     * rebuilt from the layout and the (unmodified) files of the VM, the transfer list is run on it, and the files that
+     * differ between the layout's file list and the updated image are what the tree has to change. The updated image is
+     * read once: it gives the changes and, in the same pass, the layout that replaces the recorded one. A file the app
+     * or the person changed has no stock bytes, and a compressed block cannot be rebuilt without them: unlike an ext4
+     * image (where the file's blocks can simply be left empty) the OTA is not applied then, and nothing is changed.
+     */
+    private fun blockUpdateSquashLayout(paths: VmPaths, zip: ZipFile, plan: Plan, step: BlockStep, staging: File, progress: (Msg) -> Unit): BlockSync {
+        val lf = SquashLayout.file(paths.dir)
+        val old = try {
+            SquashLayout.load(lf)
+        } catch (e: IOException) {
+            throw OtaException("the system layout recorded for this VM cannot be read (${e.message}). Import the stock firmware again.", R.string.ota_the_system_layout_recorded_for_this, e.message)
+        }
+        val prog = BlockOta.parse(readEntry(zip, step.transfer).toString(Charsets.UTF_8))
+        val patchEntry = zip.getEntry(step.patchData)
+        val need = 3L * maxOf(old.imageLength, BlockOta.imageBlocks(prog) * BlockOta.BLOCK) + (patchEntry?.size?.coerceAtLeast(0) ?: 0L) + (96L shl 20)
+        if (paths.dir.usableSpace < need) throw OtaException("not enough free space: ${need shr 20} MB are needed", R.string.ota_not_enough_free_space_mb_are, need shr 20)
+
+        // ---- the stock image, as the OTA expects it
+        val image = File(staging, "system.img")
+        progress(Msg("Rebuilding the stock system image", R.string.ota_rebuilding_the_stock_system_image))
+        val bad = try {
+            SquashLayout.rebuild(lf, image, { path ->
+                old.files[path]?.let { i -> stockBytes(paths, SquashLayout.PREFIX, SystemLayout.LFile(path, i.size, i.sha1, i.mode, LongArray(0))) }
+            }, { done, total ->
+                progress(Msg("Rebuilding the stock system image $done/$total", R.string.ota_rebuilding_the_stock_system_image_2, done, total))
+            })
+        } catch (e: IOException) {
+            throw OtaException("the system layout recorded for this VM cannot be read (${e.message}). Import the stock firmware again.", R.string.ota_the_system_layout_recorded_for_this, e.message)
+        }
+        if (bad.isNotEmpty()) {
+            val list = bad.sorted().take(12).joinToString(", ")
+            throw OtaException("${bad.size} files of /system were changed by the app or by you and cannot be rebuilt, e.g. $list. " +
+                "A SquashFS system image can only be rebuilt from unmodified files. Nothing was changed.",
+                R.string.ota_squash_files_modified, bad.size, list)
+        }
+        preChecks(zip, step, prog, plan, image, staging, progress)
+
+        // ---- the transfer list
+        runTransfer(zip, step, prog, image, staging, progress)
+        for (c in plan.rangeChecks) if (c.after && c.partition == step.partition) checkRange(image, c)
+        if (!StockImage.isSquash(image)) throw OtaException("the updated system image is not a SquashFS image, which is all this app can apply on top of a SquashFS system. Nothing was changed.", R.string.ota_the_updated_system_image_is_not_2)
+
+        // ---- what the tree has to do to match the new image, and the layout of the new image
+        progress(Msg("Reading the updated system image", R.string.ota_reading_the_updated_system_image))
+        val newLayout = File(staging, SquashLayout.NAME + ".new")
+        val staged = ArrayList<Staged>()
+        val links = ArrayList<Pair<String, String>>()
+        val dirs = ArrayList<String>()
+        val present = HashSet<String>()
+        val newDirs = HashSet<String>()
+        var patched = 0
+        var added = 0
+        var n = 0
+        try {
+            val visitor = StockImage.visitor({ File(staging, "b${n++}") }, progress,
+                onFile = { path, mode, size, sha, tmp ->
+                    present.add(path)
+                    val prev = old.files[path]
+                    if (prev != null && prev.size == size && prev.sha1 == sha) {
+                        tmp?.delete()
+                    } else {
+                        val gp = "/system/$path"
+                        val g = guestFile(paths, gp)
+                        val pk = parkedFile(paths, gp)
+                        val dest = if (!exists(g) && pk.isFile) pk else g
+                        val t = tmp ?: throw OtaException("internal error: no staged copy of $path")
+                        staged.add(Staged(t, dest, mode, dest.canExecute()))
+                        staged.addAll(sidecarCopies(paths, gp, t, mode, dest) { File(staging, "b${n++}") })
+                        if (prev != null) patched++ else added++
+                    }
+                },
+                onLink = { path, target ->
+                    present.add(path)
+                    if (old.links[path] != target) links.add(target to "/system/$path")
+                },
+                onDir = { path, _ ->
+                    present.add(path)
+                    newDirs.add(path)
+                    if (path !in old.dirs) dirs.add("/system/$path")
+                })
+            SquashLayout.capture(image, newLayout, { }, { false }, visitor)
+        } catch (e: OtaException) { throw e } catch (e: Exception) {
+            throw OtaException("the updated system image cannot be read (${e.message}). Nothing was changed.", R.string.ota_the_updated_system_image_cannot_be, e.message)
+        }
+        image.delete() // only the layout and the staged files are kept; the next partition needs the room
+        val deletes = ArrayList<Pair<String, Boolean>>()
+        // a name that is a folder now must not be left behind as a file or a link
+        for (f in old.files.keys) if (f !in present || f in newDirs) deletes.add("/system/$f" to false)
+        for (l in old.links.keys) if (l !in present || l in newDirs) deletes.add("/system/$l" to false)
+        return BlockSync(step.partition, staged, deletes, links, dirs, newLayout, lf, patched, added)
     }
 
     // ------------------------------------------------------------------ the whole installation
@@ -1639,7 +1739,7 @@ object DeltaOta {
 
         // ---- the files are in place: caches and the image profile follow the new build
         // a file-based OTA changes the tree: the recorded layout of the old image no longer describes it
-        if (!usedBlock) runCatching { SystemLayout.ALL_NAMES.forEach { File(paths.dir, it).delete() }; StockImage.file(paths.dir).delete() }
+        if (!usedBlock) runCatching { SystemLayout.ALL_NAMES.forEach { File(paths.dir, it).delete() }; StockImage.file(paths.dir).delete(); SquashLayout.file(paths.dir).delete() }
         progress(Msg("Updating the VM profile", R.string.ota_updating_the_vm_profile))
         // personalityNoop() runs once per image; the stock libc and binaries need it again
         File(paths.root, ".aemu-personality").delete()

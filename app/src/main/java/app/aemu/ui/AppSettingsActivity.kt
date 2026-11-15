@@ -129,6 +129,7 @@ private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
     val scope = rememberCoroutineScope()
     var autoUpdates by remember { mutableStateOf(AppPrefs.autoCheckUpdates(ctx)) }
     var library3d by remember { mutableStateOf(AppPrefs.library3d(ctx)) }
+    var builtinBrowser by remember { mutableStateOf(AppPrefs.builtinBrowser(ctx)) }
     var newHome by remember { mutableStateOf(AppPrefs.newHome(ctx)) }
     var updateState by remember { mutableStateOf<UpdateState>(UpdateState.Idle) }
     var downloadJob by remember { mutableStateOf<Job?>(null) }
@@ -207,7 +208,7 @@ private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
 
             item {
                 Section(stringResource(R.string.catalog_title)) {
-                    Row_(Icons.Rounded.List, stringResource(R.string.catalog_open), AppPrefs.catalogUrl(ctx)) {
+                    Row_(Icons.Rounded.List, stringResource(R.string.catalog_open), "") {
                         ctx.startActivity(Intent(ctx, RomCatalogActivity::class.java))
                     }
                 }
@@ -240,6 +241,9 @@ private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
                     }
                     Toggle(stringResource(R.string.as_library_3d), stringResource(R.string.as_library_3d_sub), library3d) {
                         library3d = it; AppPrefs.setLibrary3d(ctx, it)
+                    }
+                    Toggle(stringResource(R.string.as_builtin_browser), stringResource(R.string.as_builtin_browser_sub), builtinBrowser) {
+                        builtinBrowser = it; AppPrefs.setBuiltinBrowser(ctx, it)
                     }
                     if (app.aemu.core.HostDisplayPolicy.rotateWindow(ctx.resources.configuration.smallestScreenWidthDp)) {
                         Toggle(stringResource(R.string.as_tablet_navbar_rotation), stringResource(R.string.as_tablet_navbar_rotation_sub), hostUi.tabletNavbarRotation) {
@@ -409,9 +413,11 @@ private fun Section(title: String, subtitle: String? = null, content: @Composabl
 
 @Composable
 private fun Row_(icon: ImageVector, title: String, sub: String, mono: Boolean = false, onClick: () -> Unit) {
+    val supporting: (@Composable () -> Unit)? =
+        if (sub.isEmpty()) null else ({ Text(sub, fontFamily = if (mono) FontFamily.Monospace else null, maxLines = 2) })
     ListItem(
         headlineContent = { Text(title) },
-        supportingContent = { Text(sub, fontFamily = if (mono) FontFamily.Monospace else null, maxLines = 2) },
+        supportingContent = supporting,
         leadingContent = { Icon(icon, null, tint = MaterialTheme.colorScheme.primary) },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),

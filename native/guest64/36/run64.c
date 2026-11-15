@@ -14,7 +14,7 @@ typedef unsigned short u16;
 typedef unsigned char u8;
 
 #define IMAGE_HI 0x20u            /* IMAGE_BASE >> 32, see build.sh */
-#define IMAGE_SPAN 0x00100000u
+#define IMAGE_SPAN 0x00400000u
 
 long sc(long nr, long a, long b, long c, long d, long e, long f);
 void enter_guest(void *entry, void *sp) __attribute__((noreturn));
@@ -94,6 +94,7 @@ static u32 g_real_uid;
 static char g_qemu[512];        // translator for the firmware's 32-bit programs (AEMU64_QEMU): qemu-arm, or qemu-i386 for an x86 firmware
 static char g_qemu64[512];      // translator for the 64-bit programs of a firmware that is not arm64 (AEMU64_QEMU64): qemu-x86_64
 static int g_xlate64;           // this process is that translator running a 64-bit x86 program (g_is32 is set as well: it is a translator process)
+static int g_xlate_x86;          // Added for AEmulator Plus (2026-11-14): this process is a translator running an x86 / x86-64 program (qemu-i386 or qemu-x86_64)
 static int g_crash;
 static u64 g_logdev, g_logino;      // the service log on descriptor 2 (a file or a pipe to the app)
 static int g_logpipe;
@@ -826,6 +827,8 @@ static long rb_ppoll(long *a) {
 
 // ---------------------------------------------------------------------------------------------------- exec
 
+#include "../../common/aemu_nethook.h"   // HTTP debugger: AEMU64_NETDBG / AEMU64_NETDNS
+
 static int env_is_ours(const char *e) { return pre(e, "AEMU64_"); }
 
 static long do_exec(const char *path, char *const argv[], char *const envp[]) {
@@ -897,6 +900,9 @@ static long do_exec(const char *path, char *const argv[], char *const envp[]) {
     static char e_pad[135], e_kbd[135];
     if (g_pad[0]) { memcpy(e_pad, "AEMU64_PAD=", 11); memcpy(e_pad + 11, g_pad, slen(g_pad) + 1); *a++ = e_pad; }
     if (g_kbd[0]) { memcpy(e_kbd, "AEMU64_KBD=", 11); memcpy(e_kbd + 11, g_kbd, slen(g_kbd) + 1); *a++ = e_kbd; }
+    static char e_nd[32], e_ns[32];
+    if (nh_port) { memcpy(e_nd, "AEMU64_NETDBG=", 14); char t2[24], *s2 = utoa((u64)nh_port, t2 + sizeof t2); memcpy(e_nd + 14, s2, slen(s2) + 1); *a++ = e_nd; }
+    if (nh_dns) { memcpy(e_ns, "AEMU64_NETDNS=", 14); char t2[24], *s2 = utoa((u64)nh_dns, t2 + sizeof t2); memcpy(e_ns + 14, s2, slen(s2) + 1); *a++ = e_ns; }
     static char e_qemu[540];
     if (g_qemu[0]) { memcpy(e_qemu, "AEMU64_QEMU=", 12); memcpy(e_qemu + 12, g_qemu, slen(g_qemu) + 1); *a++ = e_qemu; }
     static char e_qemu64[540];
@@ -1000,18 +1006,33 @@ static int g_trace;
 // padding of every 16 KB-aligned library. So the call is made from a page that is no file at all (the kernel then
 // answers "not the linker" before it looks at a path): one anonymous page inside the address window the filter
 // lets through.
-#define TRAMP 0x20000ff000UL
+// Fixed for AEmulator Plus (2026-11-14): the page of the trampoline used to be one page at the fixed address IMAGE_BASE + 0xff000,
+// the last page of the 1 MB window. The runner's .bss (g_pb and the other static buffers, 0xc5178 bytes) had grown to end at
+// IMAGE_BASE + 0xffab8, i.e. over that page: the FIXED_NOREPLACE mapping failed with EEXIST, "no page for the madvise
+// trampoline", and every guest program (linkerconfig, servicemanager, all the HALs...) exited with 127. Now the page is put
+// after the end of the image (_end, which the linker defines), in a slot of 64 KB (a multiple of every arm64 page size, so
+// a 16 KB or 64 KB kernel takes it as well), and the window the filter lets through is 4 MB (IMAGE_SPAN) so there is room
+// for the image and the slot whatever the .bss grows to. The kernel's answer is in the message when no slot can be had.
+#define TRAMP_BASE 0x2000000000UL
+#define TRAMP_LEN  0x10000UL
+extern char _end[];
 static long (*g_tramp)(long nr, long a, long b, long c);
 static void tramp_init(void) {
     static const u32 code[] = { 0xaa0003e8 /* mov x8, x0 */, 0xaa0103e0 /* mov x0, x1 */, 0xaa0203e1 /* mov x1, x2 */,
                                 0xaa0303e2 /* mov x2, x3 */, 0xd4000001 /* svc #0 */, 0xd65f03c0 /* ret */ };
-    u64 r = (u64)S6(NR_mmap, TRAMP, 4096, 3, 0x22 | 0x100000 /*PRIVATE|ANONYMOUS|FIXED_NOREPLACE*/, -1, 0);
-    if (r != TRAMP) die("no page for the madvise trampoline", "");
-    memcpy((void *)TRAMP, code, sizeof code);
-    if (S3(NR_mprotect, TRAMP, 4096, 5) < 0) die("madvise trampoline cannot be made executable", "");
-    for (u64 q = TRAMP; q < TRAMP + sizeof code; q += 4) { __asm__ volatile("dc cvau, %0" : : "r"(q)); __asm__ volatile("ic ivau, %0" : : "r"(q)); }
+    u64 at = 0; long err = 0;
+    for (u64 s = ((u64)_end + TRAMP_LEN - 1) & ~(TRAMP_LEN - 1); s + TRAMP_LEN <= TRAMP_BASE + (u64)IMAGE_SPAN; s += TRAMP_LEN) {
+        u64 r = (u64)S6(NR_mmap, s, TRAMP_LEN, 3, 0x22 | 0x100000 /*PRIVATE|ANONYMOUS|FIXED_NOREPLACE*/, -1, 0);
+        if (r == s) { at = s; break; }
+        if (r >= (u64)-4095) err = -(long)r;
+        else S2(NR_munmap, r, TRAMP_LEN);   // a kernel that does not know FIXED_NOREPLACE took it as a hint: not this one
+    }
+    if (!at) { char d[24]; die("no page for the madvise trampoline, errno ", utoa((u64)err, d + sizeof d)); }
+    memcpy((void *)at, code, sizeof code);
+    if (S3(NR_mprotect, at, TRAMP_LEN, 5) < 0) die("madvise trampoline cannot be made executable", "");
+    for (u64 q = at; q < at + sizeof code; q += 4) { __asm__ volatile("dc cvau, %0" : : "r"(q)); __asm__ volatile("ic ivau, %0" : : "r"(q)); }
     __asm__ volatile("dsb ish; isb");
-    g_tramp = (long (*)(long, long, long, long))TRAMP;
+    g_tramp = (long (*)(long, long, long, long))at;
 }
 
 // Added for AEmulator Plus (2026-11-11): hyos_spawner dies in rustutils inherited_fd::init_once (canonicalize + read_dir +
@@ -1055,6 +1076,83 @@ static long trap(long nr, long *a, void *uc) {
 }
 
 #define PB(i) ((*pbp ? *pbp : (*pbp = pb_get())) + (i) * PATH_MAX)
+
+// ENOBUFS on a send. The phone's kernel answers sendmsg/sendto on an AF_UNIX socket with -ENOBUFS when it cannot get memory
+// for the message (or for its ancillary data). The 16:30 boot log shows system_server's very first write to the zygote socket
+// (getAbiList) refused that way on every attempt ("Got error connecting to zygote ... No buffer space available"): no app process
+// is ever started, ActivityManager loops on CryptKeeper and the boot never ends. A real Linux never leaves that to the program,
+// so: raise this socket's send buffer once (plain SO_SNDBUF, clamped by net.core.wmem_max; the FORCE variant needs
+// CAP_NET_ADMIN) and try again for up to half a second. The first refusal of a process goes to <root>/dev/aemu-enobufs.log with
+// the kernel's limits and memory, so the cause is on record even when the retry does not help.
+#define ENOBUFS 105
+#define NR_nanosleep 101
+static int g_enobufs_noted;
+static void fput(long fd, const char *s) { S3(NR_write, fd, s, slen(s)); }
+static void fnum(long fd, u64 v) { char b[24]; fput(fd, utoa(v, b + sizeof b)); }
+static void fproc(long fd, const char *label, const char *path, long max, int keep_nl) {
+    char v[128]; long f = S4(NR_openat, AT_FDCWD, path, 0, 0), n = 0;
+    fput(fd, label);
+    if (f >= 0) { n = S3(NR_read, f, v, max < (long)sizeof v ? max : (long)sizeof v); S1(NR_close, f); }
+    if (n > 0) { if (!keep_nl) while (n > 0 && v[n - 1] == '\n') n--; S3(NR_write, fd, v, n); } else fput(fd, "?");
+    fput(fd, keep_nl ? "" : " ");
+}
+static void enobufs_note(long nr, const long *a) {
+    if (g_enobufs_noted++) return;
+    static char lp[560];
+    memcpy(lp, g_root, g_rootlen); memcpy(lp + g_rootlen, "/dev/aemu-enobufs.log", 22);
+    long fd = S4(NR_openat, AT_FDCWD, lp, 02101 /*O_WRONLY|O_CREAT|O_APPEND*/, 0600);
+    if (fd < 0) return;
+    fput(fd, nr == NR_sendmsg ? "sendmsg" : "sendto"); fput(fd, " pid="); fnum(fd, (u64)S0(NR_getpid));
+    fput(fd, " fd="); fnum(fd, (u64)a[0]);
+    if (nr == NR_sendmsg && a[1]) {
+        const struct msgh *m = (const struct msgh *)a[1];
+        u64 tot = 0;
+        for (u64 i = 0; m->iov && i < m->iovlen && i < 16; i++) tot += m->iov[i].len;
+        fput(fd, " controllen="); fnum(fd, m->controllen); fput(fd, " iovlen="); fnum(fd, m->iovlen); fput(fd, " bytes="); fnum(fd, tot);
+    } else { fput(fd, " bytes="); fnum(fd, (u64)a[2]); }
+    int sb = 0; u32 sl = 4;
+    if (S5(NR_getsockopt, a[0], 1 /*SOL_SOCKET*/, 7 /*SO_SNDBUF*/, &sb, &sl) == 0) { fput(fd, " sndbuf="); fnum(fd, (u64)sb); }
+    fput(fd, "\n  ");
+    fproc(fd, "wmem_default=", "/proc/sys/net/core/wmem_default", 32, 0);
+    fproc(fd, "wmem_max=", "/proc/sys/net/core/wmem_max", 32, 0);
+    fproc(fd, "optmem_max=", "/proc/sys/net/core/optmem_max", 32, 0);
+    fput(fd, "\n");
+    fproc(fd, "", "/proc/meminfo", 100, 1);            // MemTotal / MemFree / MemAvailable
+    fput(fd, "\n");
+    S1(NR_close, fd);
+}
+// A guest sendmsg whose msg_controllen is garbage is refused by the kernel with -ENOBUFS for good (controllen > optmem_max,
+// checked before anything is read), no matter how often or how patiently it is retried. The 00:03 boot log: system_server's
+// getAbiList write to the secondary zygote, iovlen=1 bytes=19, controllen=0x7c00000010: the low half (16 = CMSG_SPACE(0), the
+// size of the unused cmsg buffer of LocalSocketImpl's socket_write_all) is what the guest meant, the high half is the top of
+// a stack pointer left in the 64-bit field. Every send of that kind failed, ConnectException from the zygote connection,
+// no app process ever started and the boot stalled for ever. A message with no control buffer carries no control data, and a
+// control length that does not fit 32 bits is its low half: send a corrected copy (the guest's own header is left as it was).
+static void msgh_fix(struct msgh *out, const struct msgh *in) {
+    *out = *in;
+    if (!out->control) out->controllen = 0;
+    else if (out->controllen >> 32) out->controllen &= 0xffffffffUL;
+}
+static long send_retry(long nr, const long *a0) {
+    long r, a[6];
+    struct msgh fixed;
+    for (int k = 0; k < 6; k++) a[k] = a0[k];
+    if (nr == NR_sendmsg && a[1]) {
+        const struct msgh *m = (const struct msgh *)a[1];
+        if (m->controllen && (!m->control || (m->controllen >> 32))) { msgh_fix(&fixed, m); a[1] = (long)&fixed; }
+    }
+    for (int i = 0;; i++) {
+        r = nr == NR_sendmsg ? S3(nr, a[0], a[1], a[2]) : S6(nr, a[0], a[1], a[2], a[3], a[4], a[5]);
+        if (r != -ENOBUFS || i >= 100) return r;
+        if (i == 0) {
+            int sz = 1 << 20;
+            enobufs_note(nr, a);
+            S5(NR_setsockopt, a[0], 1 /*SOL_SOCKET*/, 7 /*SO_SNDBUF*/, &sz, 4);
+        }
+        struct { long s, ns; } ts = { 0, 5000000 };      // 5 ms
+        S2(NR_nanosleep, &ts, 0);
+    }
+}
 
 static long trap2(long nr, long *a, void *uc, char **pbp) {
     int err = 0;
@@ -1392,6 +1490,7 @@ static long trap2(long nr, long *a, void *uc, char **pbp) {
     }
     case NR_bind: case NR_connect:
         if (is_nl_fd((int)a[0])) return 0;
+        if (nr == NR_connect) { long hr = nh_connect(a[0], (const void *)a[1], (u64)a[2]); if (hr != NH_PASS) return hr; }   // HTTP debugger
         if (a[1] && *(u16 *)a[1] == 16) {           // a real netlink socket: binding to groups is not for an app
             long r = S3(nr, a[0], a[1], a[2]);
             return r < 0 && nr == NR_bind ? 0 : r;
@@ -1476,6 +1575,22 @@ static long trap2(long nr, long *a, void *uc, char **pbp) {
         if (((u32)a[1] & 0xffffff00u) == 0x4600) return fb_ioctl((u32)a[1], (u64)a[2]);
         if (((a[1] >> 8) & 0xff) == 'b' && is_binder_fd((int)a[0])) return binder_ioctl((int)a[0], (u32)a[1], (u64)a[2]);
         return S3(nr, a[0], a[1], a[2]);
+    case NR_memfd_create: {
+        // Added for AEmulator Plus (2026-11-14): ART (10+) keeps its JIT code cache in a memfd that it maps twice, a writable view
+        // to emit code and an executable one to run it. QEMU's user-mode translator notices self-modifying code only by
+        // write-protecting the pages it has translated: a store through the other view never faults, so translated blocks of
+        // replaced JIT code stay in use and the guest runs stale code (SIGSEGV in art_quick_check_instance_of from
+        // /memfd:jit-cache, SIGILL, "Failed to find Dex offset for PC"). With memfd_create failing, ART takes its single-view
+        // fallback (one anonymous mapping that it writes and executes), where the write fault is seen and the translated code is
+        // dropped; when its own policy does not allow that it creates no JIT at all. Either way the guest no longer runs a
+        // stale JIT cache. Native arm64 programs and ARM guests (cacheflush) keep the dual view.
+        if (g_xlate_x86 && a[0] && (pre((const char *)a[0], "jit-cache") || pre((const char *)a[0], "/jit-cache"))) {
+            static int said;
+            if (!said++) say("aemu64: memfd_create(jit-cache) refused for a translated x86 guest (ART uses a single-view JIT cache)\n");
+            return -38;                         // ENOSYS, as on a kernel without memfd_create
+        }
+        return S2(nr, a[0], a[1]);
+    }
     case NR_mmap:
         if (a[2] == 1 && is_binder_fd((int)a[4])) return binder_mmap((u64)a[0], (u64)a[1], a[3]);
         if (g_is32 && a[2] == 1 && g_props[0] && (int)a[4] >= 0 && !gles2_for_32()) {
@@ -1729,7 +1844,8 @@ static long trap2(long nr, long *a, void *uc, char **pbp) {
             nl_handle_send((int)a[0], (const void *)a[1], (u64)a[2]);
             return a[2];
         }
-        return S6(nr, a[0], a[1], a[2], a[3], a[4], a[5]);
+        { long hr = nh_sendto(a); if (hr != NH_PASS) return hr; }   // HTTP debugger: DNS
+        return send_retry(nr, a);
     }
     case NR_writev:                             // netd's socket queries (sock_diag) write their requests this way
         if (is_nl_fd((int)a[0])) return a[1] ? nl_handle_iov((int)a[0], (const struct iov *)a[1], (u64)a[2]) : 0;
@@ -1739,7 +1855,7 @@ static long trap2(long nr, long *a, void *uc, char **pbp) {
             struct msgh *m = (struct msgh *)a[1];
             return m && m->iov ? nl_handle_iov((int)a[0], m->iov, m->iovlen) : 0;
         }
-        return S3(nr, a[0], a[1], a[2]);
+        return send_retry(nr, a);
     }
     case NR_rt_sigaction: {
         struct ksa { void *h; u64 flags; void *restorer; u64 mask; } t;
@@ -1967,6 +2083,8 @@ static void install_filter(void) {
     for (u64 i = 0; i < sizeof trapped; i++) f[n++] = JEQ(trapped[i], L_TRAP, 0);
     f[n++] = JEQ(NR_renameat2, L_TRAP, 0);
     f[n++] = JEQ(NR_statx, L_TRAP, 0);
+    // Added for AEmulator Plus (2026-11-14): memfd_create, to refuse ART's dual-view JIT code cache to an x86 guest (see trap2)
+    f[n++] = JEQ(NR_memfd_create, L_TRAP, 0);
     // glibc 2.33+ (the static qemu-arm's) answers faccessat() with faccessat2 first and falls back to faccessat only on ENOSYS;
     // a phone kernel has it (5.8+), so without this entry every access() of a 32-bit guest went to the kernel with the
     // GUEST path, i.e. to the phone's own /system, /vendor... (EACCES for an app), never into the image.
@@ -2093,6 +2211,7 @@ void aemu_main(u64 *sp) {
     if ((r = env_get(envp, "AEMU64_INPUT")) && slen(r) < sizeof g_input) memcpy(g_input, r, slen(r) + 1);
     if ((r = env_get(envp, "AEMU64_PAD")) && slen(r) < sizeof g_pad) memcpy(g_pad, r, slen(r) + 1);
     if ((r = env_get(envp, "AEMU64_KBD")) && slen(r) < sizeof g_kbd) memcpy(g_kbd, r, slen(r) + 1);
+    nh_set_env(env_get(envp, "AEMU64_NETDBG"), env_get(envp, "AEMU64_NETDNS"));
     if ((r = env_get(envp, "AEMU64_SDCARD")) && slen(r) < sizeof g_sd) { g_sdlen = slen(r); memcpy(g_sd, r, g_sdlen + 1); }
     if ((r = env_get(envp, "AEMU64_QEMU")) && slen(r) < sizeof g_qemu) memcpy(g_qemu, r, slen(r) + 1);
     if ((r = env_get(envp, "AEMU64_QEMU64")) && slen(r) < sizeof g_qemu64) memcpy(g_qemu64, r, slen(r) + 1);
@@ -2235,6 +2354,7 @@ void aemu_main(u64 *sp) {
         qargv[k++] = (char *)tq; qargv[k++] = "-B"; qargv[k++] = "0"; qargv[k++] = "-0"; qargv[k++] = (char *)argv0; qargv[k++] = progcopy;
         for (long i = 1; i < gargc && k < 4096; i++) qargv[k++] = gargv[i];
         qargv[k] = 0; gargv = qargv; gargc = k; argv0 = tq; prog = tq; is32 = 1; g_is32 = 1; if (xl64) g_xlate64 = 1;
+        { const char *q = tq; for (; *q; q++) if (q[0] == 'i' && q[1] == '3' && q[2] == '8' && q[3] == '6') break; if (xl64 || *q) g_xlate_x86 = 1; }   // qemu-x86_64, or qemu-i386 (x86 firmware's 32-bit programs)
     }
     // each world has its own libraries
     static char ldpath[64];

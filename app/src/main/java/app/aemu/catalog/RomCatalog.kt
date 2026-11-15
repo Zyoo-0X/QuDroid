@@ -1,14 +1,32 @@
 package app.aemu.catalog
 
+import app.aemu.R
+import app.aemu.core.LocalizedIllegalArgumentException
+import org.json.JSONException
+import org.json.JSONObject
 import java.net.URI
 
+/** Extra fields that only the JSON catalog (the submission worker's `/api/roms`) carries. */
+data class RomDetails(val name: String, val romVersion: String, val versionCategory: String, val submittedBy: String,
+    val fileSizeBytes: Long?, val emulatorVersion: String?, val notes: String?)
 data class CatalogRom(val device: String, val android: String, val skin: String,
-    val status: Int, val comment: String, val url: String?)
+    val status: Int, val comment: String, val url: String?, val details: RomDetails? = null)
 data class CatalogSection(val name: String, val comment: String, val source: String?, val roms: List<CatalogRom>)
 data class RomCatalog(val motd: String, val sections: List<CatalogSection>, val warningLines: List<Int>)
 
 object CatalogUrls {
-    const val DEFAULT = "https://dumpster.ralsei.tech/drel/AESSRomCatalog/rom.list"
+    const val DEFAULT = "https://rom-submissions.and-rew-mc7291.workers.dev/api/roms"
+    /**
+     * Base URL of the ROM-submission worker (no trailing slash). Used for the submit button when the catalog
+     * source is not itself the worker's `<base>/api/roms` (e.g. a custom rom.list); blank hides the button then.
+     */
+    const val SUBMIT_API_BASE = "https://rom-submissions.and-rew-mc7291.workers.dev"
+    /** The worker base for [source]: derived from `<base>/api/roms`, else [SUBMIT_API_BASE], else null. */
+    fun apiBase(source: String): String? {
+        val s = valid(source)?.substringBefore('#')?.substringBefore('?')?.trimEnd('/')
+        val derived = s?.takeIf { it.endsWith("/api/roms") }?.removeSuffix("/api/roms")?.let(::valid)
+        return derived ?: SUBMIT_API_BASE.takeIf { it.isNotBlank() }?.let(::valid)
+    }
     fun valid(value: String): String? = runCatching {
         val s = value.trim()
         require(s.length in 1..8192)
@@ -60,5 +78,37 @@ object RomCatalogParser {
             }
         }
         return RomCatalog(motd.joinToString("\n"), sections.map { CatalogSection(it.name, it.comment, it.source, it.roms.toList()) }, warnings.toList())
+    }
+}
+
+/**
+ * The worker's `GET /api/roms` payload: `{"roms":[{variant, version_category, name, rom_version, device,
+ * submitted_by, download_url, file_size_bytes, emulator_version, notes, ...}]}`. One section per variant, in the
+ * order the server sent them (it sorts by variant, then version number). Warning "lines" are 1-based entry numbers.
+ */
+object RomJsonParser {
+    private const val MAX_ROMS = 10_000
+    private fun JSONObject.text(key: String): String = if (isNull(key)) "" else optString(key).trim()
+
+    fun parse(text: String): RomCatalog {
+        val roms = (try { JSONObject(text.removePrefix("\uFEFF")).optJSONArray("roms") } catch (e: JSONException) { null })
+            ?: throw LocalizedIllegalArgumentException("Catalog JSON has no \"roms\" array", R.string.catalog_err_bad_json)
+        if (roms.length() > MAX_ROMS) throw LocalizedIllegalArgumentException("Catalog exceeds $MAX_ROMS ROMs", R.string.catalog_err_too_many_roms)
+        val warnings = linkedSetOf<Int>()
+        val bySection = LinkedHashMap<String, MutableList<CatalogRom>>()
+        for (i in 0 until roms.length()) {
+            val o = roms.optJSONObject(i)
+            val name = o?.text("name").orEmpty()
+            val device = o?.text("device").orEmpty()
+            if (o == null || name.isEmpty() || device.isEmpty()) { warnings += i + 1; continue }
+            val rawUrl = o.text("download_url")
+            val url = CatalogUrls.valid(rawUrl)
+            if (url == null) warnings += i + 1
+            val size = if (o.isNull("file_size_bytes")) null else o.optLong("file_size_bytes", -1).takeIf { it >= 0 }
+            val details = RomDetails(name, o.text("rom_version"), o.text("version_category"), o.text("submitted_by"),
+                size, o.text("emulator_version").ifEmpty { null }, o.text("notes").ifEmpty { null })
+            bySection.getOrPut(o.text("variant")) { mutableListOf() } += CatalogRom(device, "", "", -1, "", url, details)
+        }
+        return RomCatalog("", bySection.map { (variant, list) -> CatalogSection(variant, "", null, list) }, warnings.toList())
     }
 }

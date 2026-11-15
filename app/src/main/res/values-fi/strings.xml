@@ -526,4 +526,12 @@
     <string name="phantom_open_dev">Avaa kehittäjäasetukset</string>
     <string name="phantom_ignore">Ohita</string>
     <string name="phantom_never">Älä muistuta enää</string>
+    <string name="vs_netdebug">HTTP-vianetsintä</string>
+    <string name="vs_netdebug_sub">Kirjaa vieraan HTTP- ja HTTPS-pyynnöt ja voi vastata niihin tai muuttaa niitä (valikko › HTTP-vianetsintä). Lisää vianetsintä-CA:n vieraan luottamustallennustilaan. Tulee voimaan seuraavalla täydellä käynnistyksellä.</string>
+    <string name="m_netdebug">HTTP-vianetsintä</string>
+    <string name="vs_skip_perm_wait">Ohita odotus käyttöoikeuksien ohjaimelle (Android 10–13)</string>
+    <string name="vs_skip_perm_wait_sub">x86-laiteohjelmistolle ARM-puhelimessa, kun käyttöoikeuksien ohjaimen sovellus on liian hidas vastaamaan 60 sekunnissa ja system_server lopetetaan (”Error granting/upgrading runtime permissions”). Korjaa laiteohjelmiston services.jar-tiedoston niin, ettei käynnistys odota oletusarvoisia ajonaikaisia käyttöoikeuksia; esiasennetut sovellukset eivät silloin saa niitä käynnistyksessä. dex2oat estetään kääntämästä korjattua jar-tiedostoa uudelleen. Pois kytkeminen palauttaa alkuperäisen jar-tiedoston. Tulee voimaan seuraavalla täydellä käynnistyksellä.</string>
+    <string name="catalog_download_checking">Tarkistetaan linkkiä…</string>
+    <string name="catalog_download_title">Ladataan ROMia</string>
+    <string name="catalog_download_failed">Lataus epäonnistui: %1$s</string>
 </resources>

@@ -1,4 +1,5 @@
-/* Modified for AEmulator Plus, 2026-11-07: the choice between several images in a 7z (system_a.img / system_b.img) reads the archive forward only (SevenZMemberReader). */
+/* Modified for AEmulator Plus, 2026-11-15: Microsoft MS_ProjectA (Windows 10 Mobile Android subsystem) import: an LZX .cab holding aow.wim, or the bare WIM (importWindowsCab, importWimFile).
+ * Modified for AEmulator Plus, 2026-11-07: the choice between several images in a 7z (system_a.img / system_b.img) reads the archive forward only (SevenZMemberReader). */
 /* Modified for AEmulator Plus, 2026-11-06: early route for encrypted LG KDZ files (FirmwareToolset.isEncryptedKdz). */
 /* Modified for AEmulator Plus, 2026-11-06: an archive (zip, 7z, rar, tar, cpio) with several images of one partition asks which to import (PartitionChoice, planPartitionChoices);
  * vendor.tar, system_ext.tar and the other partition tars are read (importTarStream). */
@@ -26,6 +27,7 @@ import app.aemu.core.VmPaths
 import app.aemu.core.RecoveryImage
 import app.aemu.core.SystemLayout
 import app.aemu.core.StockImage
+import app.aemu.core.SquashLayout
 import org.apache.commons.compress.archivers.cpio.CpioArchiveEntry
 import org.apache.commons.compress.archivers.cpio.CpioArchiveInputStream
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry
@@ -39,6 +41,8 @@ import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
 import org.brotli.dec.BrotliInputStream
 import org.tukaani.xz.XZInputStream
 import app.aemu.importer.tools.FirmwareToolset
+import app.aemu.importer.tools.WimReader
+import app.aemu.importer.tools.WindowsCab
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileInputStream
@@ -61,6 +65,7 @@ import java.util.zip.GZIPInputStream
  *  - system.img: ext2/3/4, в том числе sparse (и разбитый на части: system.img_sparsechunk.N, system_sparsechunkN, system.img.N, system.N, system_N …)
  *  - system.new.dat(.br) + system.transfer.list (OTA 5.x–6.x)
  *  - уже готовое дерево rootfs в tar.gz (например, из стендов HTC)
+ *  - Microsoft MS_ProjectA (Windows 10 Mobile, подсистема Android): *.cab с aow.wim внутри, либо сам aow.wim
  */
 class Importer(
     private val ctx: Context,
@@ -108,30 +113,46 @@ class Importer(
     private val localized: Context by lazy { app.aemu.AppPrefs.wrap(ctx) }
     private fun lt(@androidx.annotation.StringRes id: Int, vararg args: Any?): String = localized.getString(id, *args)
 
-    fun import(uri: Uri, name: String): GuestImage {
-        if (name.endsWith(".aessvm", true)) {
-            return app.aemu.core.VmArchiveStorage.restore(ctx, uri) { path ->
+    /** One file of an import: where to read it and the name it is recognised by. */
+    class Source(val uri: Uri, val name: String)
+
+    fun import(uri: Uri, name: String): GuestImage = importAll(listOf(Source(uri, name)))
+
+    /**
+     * Imports one or several files into ONE machine, e.g. a system.img picked together with its boot.img.
+     * Every file goes through [handle] exactly like a member of an archive does, so the usual rules apply:
+     * the system image gives the file system, a boot image gives the ramdisk / kernel (kept aside until every
+     * file is read, see [useDeferredBoot]), vendor / oem / recovery images land in their own places.
+     */
+    fun importAll(sources: List<Source>): GuestImage {
+        require(sources.isNotEmpty()) { "nothing to import" }
+        if (sources.any { it.name.endsWith(".aessvm", true) }) {
+            if (sources.size > 1) throw LocalizedIOException("a VM archive cannot be imported together with other files", R.string.imp_archive_alone)
+            return app.aemu.core.VmArchiveStorage.restore(ctx, sources[0].uri) { path ->
                 if (cancelled) throw IOException("cancelled")
                 onProgress(lt(R.string.imp_restoring, path), -1f)
             }.also { onProgress(lt(R.string.import_ready), 1f) }
         }
+        // boot images last (the sort is stable): they only matter once the system is known, and the progress then reads naturally
+        val ordered = sources.sortedBy { PartitionNames.isBoot(it.name.replace('\\', '/').substringAfterLast('/')) }
+        // several loose files may hold the same partition twice (system_a.img + system_b.img, two boot.img ...): the same
+        // question an archive with duplicates raises is asked here, before anything is written
+        val plan = if (ordered.size > 1) planSafely { planLooseFiles(ordered) } else null
+        val kept = ordered.withIndex().filter { (i, _) -> plan == null || i.toString() !in plan.skip }
+        val name = kept.first().value.name
         val id = ImageStore.newId(ctx)
         paths = VmPaths(ctx, id)
         root = paths.root
         root.mkdirs()
         try {
-            onProgress(lt(R.string.imp_opening, name), 0f)
-            val pfd = ctx.contentResolver.openFileDescriptor(uri, "r") ?: throw LocalizedIOException("file failed to open", R.string.imp_file_failed_to_open)
-            pfd.use {
-                val ch = FileInputStream(pfd.fileDescriptor).channel
-                val seekable = runCatching { ch.position(0); ch.size() > 0 }.getOrDefault(false)
-                if (seekable) handle(ChannelSource(ch), ch, name, 0)
-                else {
-                    val t = spill(FileInputStream(pfd.fileDescriptor), "whole")
-                    FileChannel.open(t.toPath(), StandardOpenOption.READ).use { c -> handle(ChannelSource(c), c, name, 0) }
-                    t.delete()
-                }
+            for ((n, iv) in kept.withIndex()) {
+                val s = iv.value
+                if (cancelled) throw IOException("cancelled")
+                onProgress(lt(R.string.imp_opening, if (kept.size > 1) "${s.name} (${n + 1}/${kept.size})" else s.name), 0f)
+                // a "_b" image that was picked is read under the name the matchers know (system_b.img -> system.img)
+                readSource(s, plan?.canonical?.get(iv.index.toString()) ?: s.name)
             }
+            if (plan != null) for ((i, s) in ordered.withIndex()) if (i.toString() in plan.skip) log("skipped ${s.name}: another image of the same partition was chosen")
             useDeferredBoot()
             // build.prop is optional: some dumps/ports lack it, Analyzer infers the version from the tree
             if (LegacyFirmware.frameworkDirName(root) == null && !File(root, "system/build.prop").isFile)
@@ -159,6 +180,51 @@ class Importer(
         }
     }
 
+    private fun readSource(s: Source, name: String) {
+        val pfd = openSource(s.uri) ?: throw LocalizedIOException("file failed to open", R.string.imp_file_failed_to_open)
+        pfd.use {
+            val ch = FileInputStream(pfd.fileDescriptor).channel
+            val seekable = runCatching { ch.position(0); ch.size() > 0 }.getOrDefault(false)
+            if (seekable) handle(ChannelSource(ch), ch, name, 0)
+            else {
+                val t = spill(FileInputStream(pfd.fileDescriptor), "whole")
+                FileChannel.open(t.toPath(), StandardOpenOption.READ).use { c -> handle(ChannelSource(c), c, name, 0) }
+                t.delete()
+            }
+        }
+    }
+
+    /**
+     * The plan for files picked together: the questions of [planPartitionChoices], with the files as the members. A member's
+     * key is its position in [files]. Two files of one name (from different folders) are told apart by their folder.
+     */
+    private fun planLooseFiles(files: List<Source>): ArchivePlan? {
+        val clash = files.map { it.name.lowercase() }.let { l -> l.distinct().size < l.size }
+        val members = files.mapIndexed { i, f ->
+            val folder = if (clash && f.uri.scheme == "file") f.uri.path?.let { File(it).parentFile?.name } else null
+            val size = runCatching { openSource(f.uri)?.use { it.statSize } ?: -1L }.getOrDefault(-1L)
+            Member(i.toString(), if (folder != null) "$folder/${f.name}" else f.name, size, i)
+        }
+        val reader = object : MemberReader {
+            private fun open(m: Member) = openSource(files[m.index].uri) ?: throw IOException("file failed to open")
+            override fun head(m: Member, n: Int): ByteArray =
+                android.os.ParcelFileDescriptor.AutoCloseInputStream(open(m)).use { readUpTo(it, n) }
+            override fun <T> source(m: Member, block: (RandomSource) -> T): T = open(m).use { pfd ->
+                val ch = FileInputStream(pfd.fileDescriptor).channel
+                if (runCatching { ch.position(0); ch.size() > 0 }.getOrDefault(false)) block(ChannelSource(ch))
+                else withSpilledSource(FileInputStream(pfd.fileDescriptor), m.name, block)
+            }
+            override fun <T> stream(m: Member, block: (InputStream) -> T): T =
+                android.os.ParcelFileDescriptor.AutoCloseInputStream(open(m)).use(block)
+        }
+        return planPartitionChoices(members, reader, null, false)
+    }
+
+    /** A file picked in the built-in browser is a plain path (file:); anything else comes from a document provider. */
+    private fun openSource(uri: Uri): android.os.ParcelFileDescriptor? =
+        if (uri.scheme == "file") uri.path?.let { android.os.ParcelFileDescriptor.open(File(it), android.os.ParcelFileDescriptor.MODE_READ_ONLY) }
+        else ctx.contentResolver.openFileDescriptor(uri, "r")
+
     // ------------------------------------------------------------------ разбор контейнеров
 
     private fun handle(src: RandomSource, ch: FileChannel?, name: String, depth: Int, role: FirmwareToolset.Role? = null) {
@@ -174,10 +240,17 @@ class Importer(
         val bareRamdisk = decodeBareRamdisk(src, name, h)
         // a file called just "system" / "vendor" / "boot" ... (no extension): a partition image if it is big enough to be one
         val bare = PartitionNames.bareOk(name.replace('\\', '/'), src.size)
+        val codec = ImageCodecs.detect(h, name)?.takeIf { it != ImageCodecs.Codec.LZ4 }
         when {
             bareRamdisk != null -> takeBareRamdisk(bareRamdisk, name)
             // Chrome extension container (.crx / .crx3): a ZIP behind a header; the Play Games developer emulator is one
             CrxContainer.probe(h) -> importCrx(src, name, depth)
+            // Windows servicing cabinet of the Android subsystem of Windows 10 Mobile (microsoft_ms_projecta_mainos_cbs_*.cab):
+            // LZX folder with aow.wim inside. Ahead of the LG KDZ route below, which takes every plain *.cab for an LG one.
+            h.size >= 4 && h[0] == 'M'.code.toByte() && h[1] == 'S'.code.toByte() && h[2] == 'C'.code.toByte() && h[3] == 'F'.code.toByte() &&
+                !name.endsWith(".kdz", true) && WindowsCab.hasWim(cabSource(src)) -> importWindowsCab(src, name)
+            // aow.wim on its own (taken out of the cabinet by hand, or by another tool)
+            WimReader.probe(h) -> importWimStandalone(src, name)
             // Old LG .kdz (2008-2010 phones): an RC4-encrypted CAB. The bytes look random and the key is the file size, so it is
             // recognised here, ahead of the heuristic probes below; the toolset decrypts it while unpacking the cabinet
             FirmwareToolset.isEncryptedKdz(h, src.size) -> importViaToolset(src, name, depth)
@@ -225,6 +298,9 @@ class Importer(
             Iso9660.probe(src) -> importIso(src, name, depth)
             // full eMMC/UFS dump with a GUID partition table: boot / recovery / system are cut out of it
             GptDisk.probe(h) && src.size > (1L shl 20) -> importGptDisk(src, name)
+            // full SD card / eMMC dump with an MBR (PandaBoard, BeagleBone, old tablets): the FAT boot partition and the ext system
+            // partition are cut out of it, their roles read from the file system labels
+            MbrDisk.probe(h) && src.size > (1L shl 20) -> importMbrDisk(src, name)
             // Huawei dload/UPDATE.APP: packet chain of raw partition images (the container has no name-based hint)
             HuaweiApp.probe(h) -> importHuaweiApp(src, name, strict = depth == 0)
             // Acer flash package (*.bin / *.nb0): table of named images, YAFFS2 rootfs + system
@@ -251,12 +327,9 @@ class Importer(
             UbiFsReader.probe(src) -> importImage(src, "system")
             Yaffs2Reader.probe(src) -> importImage(src, "system")
             ErofsReader.probe(src) -> importImage(src, "system")
-            // Compression signatures win over misleading suffixes (a gzip file named *.tgz.tar is not a plain tar)
-            FirmwareContainers.compression(h) != null -> when (FirmwareContainers.compression(h)!!) {
-                FirmwareContainers.Compression.GZIP -> importCompressed(GZIPInputStream(streamOf(src), 1 shl 16), name, depth)
-                FirmwareContainers.Compression.XZ -> importCompressed(XZInputStream(streamOf(src)), name, depth)
-                FirmwareContainers.Compression.BZIP2 -> importCompressed(BZip2CompressorInputStream(streamOf(src)), name, depth)
-            }
+            // Compression signatures win over misleading suffixes (a gzip file named *.tgz.tar is not a plain tar).
+            // gzip / xz / lzma / bz2 / zstd / brotli; lz4 is handled further down (a recovery may be lz4-framed).
+            codec != null -> importCompressed(ImageCodecs.open(codec, streamOf(src)), name, depth)
             isTar(h) || name.endsWith(".tar", true) || name.endsWith(".md5", true) || name.endsWith(".win", true) ->
                 importTarStream(streamOf(src), name, depth, src)
             // a recovery image reached directly (extracted by the firmware toolset, nested archive, plain file)
@@ -355,7 +428,7 @@ class Importer(
     private fun importCompressed(decoded: InputStream, name: String, depth: Int) {
         val base = name.substringAfterLast('/').substringAfterLast('\\')
         val inner = base.replace(Regex("(?i)\\.(tgz|tbz2?|txz)$"), ".tar")
-            .replace(Regex("(?i)\\.(gz|xz|bz2|lz4)$"), "").ifEmpty { "payload" }
+            .replace(Regex("(?i)\\.(tlz|tzst)$"), ".tar").let { ImageCodecs.stripSuffix(it) }.ifEmpty { "payload" }
         val f = decoded.use { spill(it, inner) }
         try {
             if (f.length() < 2) throw LocalizedIOException("compressed file is empty: $name", R.string.imp_compressed_file_is_empty, name)
@@ -507,6 +580,33 @@ class Importer(
         }
     }
 
+    /**
+     * Settings import of one optional partition ([mount]: "oem", "vendor", "odm", "system/product", "mi_ext" ...) into an
+     * existing VM. Like [importOemInto], but for any mount point: [image] is a raw / sparse ext, EROFS, YAFFS2 or Moto-signed
+     * image, [dest] a staging folder that gets "<mount>/...". [vm] is needed because ext4 partitions of the block-OTA set
+     * (vendor, odm, product, system_ext) record their layout file in the VM's directory; the caller removes it on failure.
+     */
+    internal fun importPartitionInto(image: File, dest: File, mount: String, vm: VmPaths) {
+        paths = vm
+        root = dest
+        File(dest, mount).mkdirs()
+        FileChannel.open(image.toPath(), StandardOpenOption.READ).use { c ->
+            val src = ChannelSource(c)
+            importImage(if (SparseSource.probe(src)) SparseSource(listOf(src)) else src, mount)
+        }
+        for ((target, link) in symlinks) {
+            val rel = link.trimStart('/')
+            if (!rel.startsWith("$mount/")) continue
+            val f = File(root, rel)
+            if (!f.canonicalPath.startsWith(File(root, mount).canonicalPath)) continue
+            f.parentFile?.mkdirs()
+            runCatching {
+                if (f.exists() || isLink(f)) { if (f.isDirectory && !isLink(f)) return@runCatching; f.delete() }
+                Os.symlink(relTarget(link, target), f.absolutePath)
+            }
+        }
+    }
+
     /** *.APP inside an archive: read in place when stored, otherwise through a temp file (the packets need random access). */
     private fun importZipHuaweiApp(zip: ZipFile, e: ZipArchiveEntry, base: String) {
         val ch = zipChannel
@@ -529,13 +629,13 @@ class Importer(
         val ch = zipChannel
         if (e.method == ZipArchiveEntry.STORED && ch != null) {
             runCatching { zip.getRawInputStream(e).close() } // computes dataOffset
-            if (e.dataOffset > 0) { importGptDisk(ChannelSource(ch, e.dataOffset, e.size), base); return }
+            if (e.dataOffset > 0) { importDiskImage(ChannelSource(ch, e.dataOffset, e.size), base); return }
         }
-        if (zip.getInputStream(e).use { importGptStream(it, base) }) return
+        if (zip.getInputStream(e).use { importDiskStream(it, base) }) return
         log("$base: not readable as a stream, copying it out first")
         val t = spillEntry(zip, e)
         try {
-            FileChannel.open(t.toPath(), StandardOpenOption.READ).use { c -> importGptDisk(ChannelSource(c), base) }
+            FileChannel.open(t.toPath(), StandardOpenOption.READ).use { c -> importDiskImage(ChannelSource(c), base) }
         } catch (ex: IOException) {
             if (cancelled) throw ex
             log("$base: partition table unreadable, skipped (${ex.message})")
@@ -878,7 +978,7 @@ class Importer(
                 // whole-disk image with a GPT inside the archive (Android Things iot_rpi3.img: 4.5 GB, deflated):
                 // read once as a stream, only the boot / oem / system / gapps slots are kept
                 // (a Googlebook / Chrome OS style recovery zip names the disk "*_recovery_*.bin", so not only "*.img")
-                PartitionNames.isDiskImageName(base) && e.size > (16L shl 20) && GptDisk.probe(zipEntryHead(zip, e, 4104)) ->
+                PartitionNames.isDiskImageName(base) && e.size > (16L shl 20) && zipEntryHead(zip, e, 4104).let { GptDisk.probe(it) || MbrDisk.probe(it) } ->
                     importZipGptDisk(zip, e, base)
                 // stock OTA: no recovery.img, the recovery is boot.img + recovery-from-boot.p (see rebuildRecoveryFromBoot)
                 RecoveryFromBoot.isPatchFile(base) && e.size in 1..(32L shl 20) -> zip.getInputStream(e).use { rfbPatch = it.readBytes() }
@@ -887,6 +987,9 @@ class Importer(
                 RecoveryFromBoot.isBonusFile(base) && e.size in 1..(8L shl 20) -> zip.getInputStream(e).use { rfbBonus = it.readBytes() }
                 base.equals("system.yaffs2.img", true) -> withEntrySource(zip, e) { importImage(it, "system") }
                 base.endsWith(".yaffs2.img", true) -> {} // CWM user-data/cache backups are not firmware.
+                // raw NAND partition dumps (mtdblock0.img ... mtdblock6.img of an HTC Sooner): nothing in the name says which
+                // partition it is, the content decides (see importMtdDump). The 7z reader and handle() already do this.
+                NandDump.isMtdName(base) && e.size > 0 -> withEntrySource(zip, e) { importMtdDump(it, base) }
                 // Sony Flashtool .ftf bundle: system.sin, kernel.sin, fotakernel.sin ...
                 base.endsWith(".sin", true) -> withSinSource(zip, e) { importSin(it, base) }
                 // a whole .ftf bundle inside another archive
@@ -1397,7 +1500,7 @@ class Importer(
         if (group == "boot" || group == "recovery") return Inspected(false, null)
         if (group != "system" && m.size in 0L..4096L) return Inspected(true, null)
         // an lz4-packed image is listed by name: unpacking it here would cost as much as the import
-        if (m.name.endsWith(".lz4", true)) return Inspected(false, null)
+        if (ImageCodecs.SUFFIX.containsMatchIn(m.name)) return Inspected(false, null)
         return try { reader.source(m) { inspectFilesystem(it) } } catch (t: Throwable) {
             if (cancelled) throw IOException("cancelled")
             Inspected(false, null)
@@ -1649,7 +1752,7 @@ class Importer(
                     }
                     // raw NAND partition dump: classified by content once the archive is read (see importMtdDump)
                     NandDump.isMtdName(base) && e.size > 0 -> nested.add(spill(entryStream, base) to "mtd")
-                    else -> if (e.size < (4L shl 20) || !importGptStream(entryStream, base)) drain(entryStream)
+                    else -> if (e.size < (4L shl 20) || !importDiskStream(entryStream, base)) drain(entryStream)
                 }
                 onProgress(lt(R.string.imp_extracting, base), 0.5f)
             }
@@ -1765,6 +1868,7 @@ class Importer(
      *  - a YAFFS2 volume with build.prop at its root is the system partition;
      *  - a kernel with a ramdisk is the boot partition, or the recovery when the ramdisk carries /sbin/recovery
      *    (dumps that keep the spare area behind each page are read without it, see [NandDump]);
+     *  - a length-prefixed gzip'd cpio with an old-style /etc/init.rc is the ramdisk of a pre-1.0 phone (HTC Sooner);
      *  - anything else (bootloader, calibration data, logos ...) is not needed and is skipped.
      */
     private fun importMtdDump(src: RandomSource, name: String) {
@@ -1781,12 +1885,29 @@ class Importer(
             for (image in NandDump.candidates(raw)) {
                 val rd = runCatching { BootImage.ramdisk(image) }.getOrNull()
                 if (rd.isNullOrEmpty() || rd.none { e -> e.name.removePrefix("./").let { it == "init.rc" || it == "sbin/recovery" } }) continue
-                if (hasRecoveryBinary(image)) takeRecovery(image.inputStream(), "recovery ($base)") else takeBoot(image)
+                // HTC Sooner: the boot ramdisk carries /sbin/recovery as well, so that alone does not make it the recovery.
+                // A ramdisk whose old-syntax init.rc starts the zygote or the runtime is the one that boots the system.
+                if (hasRecoveryBinary(image) && !startsLegacySystem(rd)) takeRecovery(image.inputStream(), "recovery ($base)") else takeBoot(image)
+                return
+            }
+            // the ramdisk partition of a pre-1.0 phone (HTC Sooner): no boot image around it, a length and a gzip'd cpio with
+            // /etc/init.rc in the old block syntax. Taken as a bare ramdisk, never written out as boot.img.
+            BootImage.legacyRamdisk(raw)?.let { rd ->
+                log("$base: pre-1.0 ramdisk partition")
+                takeBareRamdisk(rd, base)
                 return
             }
         }
         log("$base: not a boot, recovery or system partition, skipped")
     }
+
+    /** True if the ramdisk's pre-1.0 /etc/init.rc (block syntax) autostarts a zygote or runtime service: a boot ramdisk, not a recovery. */
+    private fun startsLegacySystem(rd: List<BootImage.CpioEntry>): Boolean = runCatching {
+        val rc = rd.firstOrNull { it.name.removePrefix("./") == "etc/init.rc" } ?: return false
+        val text = String(rc.data, Charsets.ISO_8859_1)
+        LegacyFirmware.isLegacyInitRc(text) &&
+            LegacyFirmware.parseInitRc(text).services.any { it.autostart && (it.name == "zygote" || it.name == "runtime") }
+    }.getOrDefault(false)
 
     /** True if the YAFFS2 volume has /build.prop at its root: a raw /system partition. */
     private fun yaffs2HoldsSystem(src: RandomSource): Boolean = try {
@@ -1981,6 +2102,185 @@ class Importer(
             }
         } finally { deleteTree(dir) }
         return true
+    }
+
+    /** A whole-disk image read at random, GPT (eMMC / UFS dump) or MBR (SD card / old eMMC dump). */
+    private fun importDiskImage(src: RandomSource, name: String) {
+        val first = ByteBuffer.allocate(8192).also { src.read(0, it) }.array()
+        if (!GptDisk.probe(first) && MbrDisk.probe(first)) importMbrDisk(src, name) else importGptDisk(src, name)
+    }
+
+    /** The same for a sequential stream (a deflated zip entry, a 7z entry). Returns false if the stream is neither kind of disk. */
+    private fun importDiskStream(input: InputStream, label: String): Boolean {
+        val first = ByteArray(8192)
+        val n = GptDisk.readFully(input, first, 0, first.size)
+        val head = first.copyOf(n)
+        val rest = java.io.SequenceInputStream(java.io.ByteArrayInputStream(first, 0, n), input)
+        return if (!GptDisk.probe(head) && MbrDisk.probe(head)) importMbrStream(rest, label) else importGptStream(rest, label)
+    }
+
+    /**
+     * Random-access dump with an MBR partition table (primary and logical partitions). An MBR names nothing, so the role of
+     * each partition comes from its file system label ("boot", "system", ...); with no "system" label the ext partition whose
+     * root holds build.prop is the system. The partitions are used in place, nothing is copied (but the small FAT boot one).
+     */
+    private fun importMbrDisk(src: RandomSource, name: String) {
+        val parts = MbrDisk.parse(src).filter { !MbrDisk.isExtendedPart(it) && it.size > 0 && it.start < src.size }
+        if (parts.isEmpty()) throw LocalizedIOException("$name: unreadable MBR", R.string.imp_unreadable_mbr, name)
+        fun slice(p: MbrDisk.Part) = SliceSource(src, p.start, minOf(p.size, src.size - p.start))
+        val found = ArrayList<Pair<MbrDisk.Role, MbrDisk.Part>>()
+        val idents = HashMap<Int, MbrDisk.Ident>()
+        var rawBoot = false
+        for ((i, p) in parts.withIndex()) {
+            val head = ByteBuffer.allocate(MbrDisk.IDENT_BYTES).also { src.read(p.start, it) }.array()
+            val id = MbrDisk.identify(head)
+            idents[p.number] = id
+            val role = MbrDisk.roleOf(id, slice(p).size, i == 0, rawBoot)
+            if (role == MbrDisk.Role.BOOT_RAW) rawBoot = true
+            if (role != null) found.add(role to p)
+        }
+        if (found.none { it.first == MbrDisk.Role.SYSTEM }) {
+            // no label says which one is the system: the ext partition that has build.prop in its root (or in system/) is
+            for (p in parts) {
+                val id = idents[p.number] ?: continue
+                if (id.fs != MbrDisk.Fs.EXT || MbrDisk.isDataLabel(id.label) || found.any { it.second === p }) continue
+                val holdsSystem = runCatching {
+                    val fs = Ext4Reader(slice(p))
+                    fs.lookup("build.prop") != null || fs.lookup("system/build.prop") != null
+                }.getOrDefault(false)
+                if (holdsSystem) { found.add(MbrDisk.Role.SYSTEM to p); break }
+            }
+        }
+        val picks = MbrDisk.pick(found)
+        if (picks.none { it.first == MbrDisk.Role.SYSTEM })
+            throw LocalizedIOException("$name: no system partition in MBR", R.string.imp_no_system_partition_in_mbr, name)
+        log("$name: full dump (MBR), partitions " + picks.joinToString { "${it.first.name.lowercase()} #${it.second.number} ${it.second.size shr 20} MB" })
+        for ((role, p) in picks) {
+            if (cancelled) throw IOException("cancelled")
+            applyMbrPart(role, slice(p))
+        }
+    }
+
+    private fun applyMbrPart(role: MbrDisk.Role, src: RandomSource) {
+        when (role) {
+            MbrDisk.Role.BOOT_RAW -> applyGptPart(GptDisk.Kind.BOOT, src)
+            MbrDisk.Role.BOOT_FAT -> {
+                // the FAT reader needs a file; the volume is small (a boot partition)
+                val volume = spill(streamOf(src), "boot-fat.img")
+                try { takeUbootBoot(volume) } finally { deleteTree(volume.parentFile ?: volume) }
+            }
+            MbrDisk.Role.OEM -> applyGptPart(GptDisk.Kind.OEM, src)
+            MbrDisk.Role.SYSTEM -> applyGptPart(GptDisk.Kind.SYSTEM, src)
+            MbrDisk.Role.VENDOR -> applyGptPart(GptDisk.Kind.VENDOR, src)
+        }
+    }
+
+    /** The FAT boot partition of a board card: kernel + ramdisk files packed as a boot image, then read like one. */
+    private fun takeUbootBoot(volume: File) {
+        val img = UbootBoot.fromFat(volume) { log(it) }
+        if (img == null) { log("boot: nothing to boot from on the FAT partition, skipped"); return }
+        takeBoot(img)
+    }
+
+    /**
+     * Sequential MBR dump (a deflated zip entry, a 7z entry that cannot be seeked). The partitions are walked in disk order;
+     * each one is recognised by the start of it (file system label) and only the wanted ones are written to temp files, so
+     * a 4 GB card is not stored: reading stops once the system and a boot partition are in, and never goes on into the
+     * extended partition (cache / userdata / sdcard) when the system is already found. Returns false if the stream is no
+     * MBR disk, or if no partition says it is the system (the caller then copies the whole entry out and uses [importMbrDisk],
+     * which can look inside the partitions).
+     */
+    private fun importMbrStream(input: InputStream, label: String): Boolean {
+        val s0 = ByteArray(512)
+        if (GptDisk.readFully(input, s0, 0, 512) < 512 || !MbrDisk.probe(s0)) return false
+        val prim = MbrDisk.primaries(s0).sortedBy { it.start }
+        class Out(val role: MbrDisk.Role, val part: MbrDisk.Part, val file: File)
+        val outs = ArrayList<Out>()
+        val dir = File(tmp, "mbr-${System.nanoTime()}").apply { mkdirs() }
+        try {
+            var pos = 512L
+            var eof = false
+            var rawBoot = false
+            var seen = 0
+            val scratch = ByteArray(1 shl 20)
+            var tick = 0
+            fun skipTo(target: Long): Boolean {
+                while (pos < target) {
+                    if (cancelled) throw IOException("cancelled")
+                    val r = input.read(scratch, 0, minOf(scratch.size.toLong(), target - pos).toInt())
+                    if (r < 0) { eof = true; return false }
+                    pos += r
+                    if (++tick % 16 == 0) onProgress(lt(R.string.imp_reading, label), -1f)
+                }
+                return true
+            }
+            fun done() = outs.any { it.role == MbrDisk.Role.SYSTEM } && outs.any { it.role == MbrDisk.Role.BOOT_FAT || it.role == MbrDisk.Role.BOOT_RAW }
+            // false: the stream ended (or cannot go back to the partition), nothing more can be found
+            fun visit(p: MbrDisk.Part): Boolean {
+                val first = seen++ == 0
+                if (p.size < MbrDisk.IDENT_BYTES || p.start < pos || !skipTo(p.start)) return !eof
+                val head = ByteArray(MbrDisk.IDENT_BYTES)
+                val got = GptDisk.readFully(input, head, 0, head.size)
+                pos += got
+                if (got < head.size) { eof = true; return false }
+                val role = MbrDisk.roleOf(MbrDisk.identify(head), p.size, first, rawBoot)
+                if (role == null || outs.any { it.role == role }) return true
+                if (role == MbrDisk.Role.BOOT_RAW) rawBoot = true
+                val f = File(dir, "${role.name.lowercase()}-${outs.size}.img")
+                f.outputStream().buffered(1 shl 20).use { o ->
+                    o.write(head)
+                    var left = p.size - head.size
+                    while (left > 0) {
+                        if (cancelled) throw IOException("cancelled")
+                        if (tmp.usableSpace < (64L shl 20)) throw LocalizedIOException("Not enough space to unpack firmware", R.string.imp_not_enough_space_to_unpack_firmware)
+                        val r = input.read(scratch, 0, minOf(scratch.size.toLong(), left).toInt())
+                        if (r < 0) { eof = true; break } // a truncated dump: the partition is what there is of it
+                        o.write(scratch, 0, r)
+                        left -= r
+                        pos += r
+                        if (++tick % 16 == 0) onProgress(lt(R.string.imp_reading, label), -1f)
+                    }
+                }
+                outs.add(Out(role, p, f))
+                return !eof
+            }
+            loop@ for (p in prim) {
+                if (!MbrDisk.isExtendedPart(p)) {
+                    if (!visit(p)) break@loop
+                } else {
+                    if (outs.any { it.role == MbrDisk.Role.SYSTEM }) break@loop
+                    // logical partitions: the chain of EBRs, each one in front of its partition
+                    val base = p.start / MbrDisk.SECTOR
+                    var cur = base
+                    var number = 5
+                    var guard = 0
+                    while (guard++ < 128 && !done()) {
+                        if (cur * MbrDisk.SECTOR < pos || !skipTo(cur * MbrDisk.SECTOR)) break@loop
+                        val ebr = ByteArray(512)
+                        if (GptDisk.readFully(input, ebr, 0, 512) < 512) break@loop
+                        pos += 512
+                        val es = MbrDisk.entries(ebr) ?: break
+                        val data = es.firstOrNull { !MbrDisk.isExtendedType(it.type) }
+                        if (data != null && data.count > 0 &&
+                            !visit(MbrDisk.Part(number++, data.type, (cur + data.first) * MbrDisk.SECTOR, data.count * MbrDisk.SECTOR, true))) break@loop
+                        val next = es.firstOrNull { MbrDisk.isExtendedType(it.type) } ?: break
+                        if (base + next.first <= cur) break
+                        cur = base + next.first
+                    }
+                }
+                if (done()) break@loop
+            }
+            if (outs.none { it.role == MbrDisk.Role.SYSTEM }) return false
+            log("$label: full dump (MBR), partitions " + outs.joinToString { "${it.role.name.lowercase()} #${it.part.number} ${it.part.size shr 20} MB" })
+            for (role in MbrDisk.Role.values()) {
+                val o = outs.firstOrNull { it.role == role } ?: continue
+                if (cancelled) throw IOException("cancelled")
+                if (role == MbrDisk.Role.BOOT_FAT) takeUbootBoot(o.file)
+                else FileChannel.open(o.file.toPath(), StandardOpenOption.READ).use { c -> applyMbrPart(role, ChannelSource(c)) }
+                o.file.delete()
+            }
+            return true
+        } finally { deleteTree(dir) }
     }
 
     private fun importVdatPair(data: File, list: File, key: String, depth: Int) {
@@ -2487,7 +2787,34 @@ class Importer(
      */
     private var keepStockImage = false
 
-    private fun importImage(source: RandomSource, mount: String) {
+    /**
+     * A partition image that may itself be compressed (system.img.xz / .lzma / .lz4 / .zst / .br / .bz2 / .gz, or the same
+     * under a plain name): unpacked to a temp file first, then read as usual. Applies to every partition (system, vendor,
+     * product, system_ext, odm, oem, ...) and to every container that hands the image over.
+     */
+    private fun importImage(source: RandomSource, mount: String) = withDecoded(source) { s ->
+        importImageRaw(if (SparseSource.probe(s)) SparseSource(listOf(s)) else s, mount)
+    }
+
+    private fun <T> withDecoded(src: RandomSource, level: Int = 0, block: (RandomSource) -> T): T {
+        if (level < 4 && src.size >= 32) {
+            val buf = ByteBuffer.allocate(minOf(src.size, 65536L).toInt())
+            src.read(0, buf); buf.flip()
+            val h = ByteArray(buf.remaining()).also { buf.get(it) }
+            val codec = ImageCodecs.detect(h, null)
+            if (codec != null) {
+                val f = spill(ImageCodecs.open(codec, streamOf(src)), "image.img")
+                try {
+                    if (f.length() < 2) throw LocalizedIOException("compressed file is empty: image", R.string.imp_compressed_file_is_empty, "image")
+                    log("image: ${codec.name.lowercase()}-compressed, unpacked ${f.length() shr 20} MB")
+                    return FileChannel.open(f.toPath(), StandardOpenOption.READ).use { c -> withDecoded(ChannelSource(c), level + 1, block) }
+                } finally { deleteTree(f.parentFile ?: f) }
+            }
+        }
+        return block(src)
+    }
+
+    private fun importImageRaw(source: RandomSource, mount: String) {
         // Motorola signed images carry a signature header in front of the ext4 (see MotoImage)
         val src = MotoImage.unwrap(source)
         if (src !== source) log("image $mount: Motorola signature header skipped, ${src.size shr 20} MB filesystem")
@@ -2560,14 +2887,7 @@ class Importer(
             val artifacts = FirmwareToolset.extract(image, File(dir, "out")) { msg -> log(msg) }
             val zipFile = artifacts.firstOrNull { it.file.isFile }?.file
                 ?: throw LocalizedIOException("$fsName image produced no files", R.string.imp_image_produced_no_files, fsName)
-            if (keep && kind == "SQUASHFS") {
-                // the partition of a block OTA: delta OTAs run on this image, see StockImage
-                val kept = StockImage.file(paths.dir)
-                runCatching { image.copyTo(kept, overwrite = true) }.onFailure {
-                    kept.delete()
-                    log("image $mount: stock image not kept (${it.message}); block-based OTAs cannot be applied to this VM")
-                }
-            }
+            if (keep && kind == "SQUASHFS") recordSquashLayout(image, mount)
             image.delete()
             var n = 0
             ZipFile.builder().setFile(zipFile).get().use { zip ->
@@ -2594,6 +2914,135 @@ class Importer(
             if (mount == "system") gotSystem = true
             log("$fsName $mount: $n objects")
         } finally { deleteTree(dir) }
+    }
+
+    /**
+     * The partition of a block OTA: delta OTAs run on the stock image, which is rebuilt later from what is recorded here
+     * (see [SquashLayout]) instead of keeping a second copy of it. Only if the image cannot be recorded (a structure
+     * the layout does not describe) is the image itself kept, as before ([StockImage]).
+     */
+    private fun recordSquashLayout(image: File, mount: String) {
+        val lf = SquashLayout.file(paths.dir)
+        val copy = StockImage.file(paths.dir)
+        try {
+            onProgress(lt(R.string.imp_recording_the_layout_of_image, mount), -1f)
+            val st = SquashLayout.capture(image, lf, { log(it) }, { cancelled })
+            copy.delete()
+            log("image $mount: SquashFS layout kept, ${st.storedBytes shr 10} KB of the ${st.imageBytes shr 20} MB image stored " +
+                "(${st.rebuilt} data blocks are rebuilt from the files, ${st.stored} are stored as they were)")
+        } catch (e: Exception) {
+            lf.delete()
+            if (cancelled) throw IOException("cancelled")
+            log("image $mount: layout not kept (${e.message}); keeping the image itself")
+            runCatching { image.copyTo(copy, overwrite = true) }.onFailure {
+                copy.delete()
+                log("image $mount: stock image not kept (${it.message}); block-based OTAs cannot be applied to this VM")
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ Windows 10 Mobile Android subsystem (MS_ProjectA)
+
+    private fun cabSource(src: RandomSource) = object : WindowsCab.Source {
+        override fun length() = src.size
+        override fun readFully(pos: Long, b: ByteArray, off: Int, len: Int) { src.read(pos, ByteBuffer.wrap(b, off, len)) }
+    }
+
+    /**
+     * microsoft_ms_projecta_mainos_cbs_*.cab: an LZX cabinet with update.mum, manifests, the subsystem's Windows-side DLLs
+     * and windows/System32/aow/aow.wim, whose image is the Android root file system (init, system/, sbin/ ...). Only the
+     * WIM is of use to the guest; it is unpacked to a temp file and read by [importWimFile].
+     */
+    private fun importWindowsCab(src: RandomSource, name: String) {
+        val work = File(tmp, "cab-${System.nanoTime()}").apply { mkdirs() }
+        try {
+            onProgress(lt(R.string.imp_opening, name), -1f)
+            val wims = WindowsCab.extractWims(cabSource(src), work) { msg -> log(msg) }
+            var any = false
+            for (w in wims) {
+                if (cancelled) throw IOException("cancelled")
+                if (importWimFile(w, w.name)) any = true
+                w.delete()                       // the unpacked copy is no longer needed
+            }
+            if (!any) throw LocalizedIOException("no Android system partition found in file", R.string.imp_no_android_system_partition_found_in)
+        } finally { deleteTree(work) }
+    }
+
+    private fun importWimStandalone(src: RandomSource, name: String) {
+        val f = spill(streamOf(src), name)
+        try {
+            if (!importWimFile(f, name))
+                throw LocalizedIOException("no Android system partition found in file", R.string.imp_no_android_system_partition_found_in)
+        } finally { deleteTree(f.parentFile ?: f) }
+    }
+
+    /**
+     * The image of a WIM that holds an Android root file system, laid out like a system-as-root partition: the top level
+     * (init*.rc, sepolicy, sbin/ ...) is the guest root and /system is a folder in it.
+     *
+     * An Astoria image is made on NTFS, which has no Unix modes and no symlinks, so each file carries a named data
+     * stream "aow" (u32 mode, u32 uid, u32 gid, zero padding; the mode's type bits say regular file, directory or
+     * symlink) and a symlink's own data is its target with Windows separators ("\system\bin\mksh").
+     * Returns false when no image in the WIM looks like Android.
+     */
+    private fun importWimFile(f: File, name: String): Boolean {
+        WimReader(f).use { wim ->
+            var idx = 0
+            for (i in 1..wim.imageCount()) {
+                var android = false
+                wim.walk(i, WimReader.Visitor { e -> if (e.path == "system/build.prop" || e.path == "system/framework") android = true })
+                if (android) { idx = i; break }
+            }
+            if (idx == 0) { log("wim $name: no Android system image in it"); return false }
+            log("wim $name: image $idx of ${wim.imageCount()} is Android")
+            onProgress(lt(R.string.imp_reading_image, "system", "WIM"), -1f)
+            var n = 0
+            wim.walk(idx, WimReader.Visitor { e ->
+                if (cancelled) throw IOException("cancelled")
+                val rel = e.path
+                val top = rel.substringBefore('/')
+                // the VM creates /dev, /proc and /sys itself
+                if (top == "dev" || top == "proc" || top == "sys") return@Visitor
+                val aow = e.named["aow"]?.takeIf { it.size in 4..4096 }?.let { runCatching { wim.read(it) }.getOrNull() }
+                val unixMode = if (aow != null && aow.size >= 4)
+                    (aow[0].toInt() and 255) or ((aow[1].toInt() and 255) shl 8) or ((aow[2].toInt() and 255) shl 16) or ((aow[3].toInt() and 255) shl 24)
+                else -1
+                val type = if (unixMode >= 0) unixMode and 0xF000 else 0
+                val dest = FirmwareContainers.destination(root, rel)
+                when {
+                    e.isDir -> { if (!dest.isDirectory && !dest.mkdirs()) throw LocalizedIOException("cannot create $rel", R.string.imp_cannot_create, rel) }
+                    type == 0xA000 -> {
+                        val target = wimLinkTarget(String(wim.read(e.data), Charsets.UTF_8))
+                        val ok = target != null && runCatching { FirmwareContainers.checkLink(rel, target) }.isSuccess
+                        if (ok) symlinks.add(target!! to "/$rel") else log("wim: symlink $rel has no usable target, skipped")
+                    }
+                    type == 0 || type == 0x8000 -> {
+                        // the emulator starts the services itself: init, adbd and ueventd are not used (see AbLayout.skipRootFile)
+                        if (AbLayout.skipRootFile(rel)) return@Visitor
+                        dest.parentFile?.mkdirs()
+                        // Links are only created by finishTree, after all file bytes.
+                        if (isLink(dest)) throw LocalizedIOException("WIM destination is a symlink", R.string.imp_yaffs_destination_is_a_symlink)
+                        wim.open(e.data).use { i -> dest.outputStream().buffered(1 shl 20).use { o -> i.copyTo(o, 1 shl 16) } }
+                        applyMode(dest, if (unixMode >= 0) unixMode and 0xfff else 0x1a4)
+                        files++; bytes += dest.length()
+                    }
+                    else -> {}   // device nodes, fifos, sockets: nothing to make on the host
+                }
+                if (++n % 150 == 0) onProgress(lt(R.string.ota_detail_with_name, "system", rel.substringAfterLast('/')), -1f)
+            })
+            gotSystem = true
+            systemAsRoot = true
+            log("WIM system: $n objects (root file system in the image)")
+        }
+        return true
+    }
+
+    /** Symlink target of an Astoria image: Windows separators, absolute paths and "..", normalised to a clean path. */
+    private fun wimLinkTarget(raw: String): String? {
+        val t = raw.replace('\\', '/').trimEnd('\u0000', '\r', '\n', ' ')
+        if (t.isEmpty()) return null
+        val norm = runCatching { java.nio.file.Paths.get(t).normalize().toString() }.getOrNull()
+        return norm?.ifEmpty { null }
     }
 
     private fun importYaffs2(src: RandomSource, mount: String) {

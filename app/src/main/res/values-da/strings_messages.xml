@@ -232,4 +232,7 @@
     <string name="imp_choice_text">Denne pakke indeholder mere end én %1$s (%2$d af %3$d). Vælg den, der skal importeres.</string>
     <string name="imp_choice_ok">Importér</string>
     <string name="imp_choice_cancel">Annullér import</string>
+    <string name="ota_squash_files_modified">%1$d filer i /system er blevet ændret af appen eller af dig og kan ikke genopbygges, f.eks. %2$s. Et SquashFS-systemaftryk kan kun genopbygges ud fra uændrede filer. Intet blev ændret.</string>
+    <string name="imp_unreadable_mbr">%1$s: ulæselig MBR-partitionstabel</string>
+    <string name="imp_no_system_partition_in_mbr">%1$s: ingen systempartition i MBR</string>
 </resources>

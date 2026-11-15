@@ -232,4 +232,7 @@
     <string name="imp_choice_text">Šajā pakotnē ir vairāk nekā viens vienums (%1$s): %2$d no %3$d. Izvēlieties to, ko importēt.</string>
     <string name="imp_choice_ok">Importēt</string>
     <string name="imp_choice_cancel">Atcelt importēšanu</string>
+    <string name="ota_squash_files_modified">Lietotne vai jūs esat mainījuši %1$d failus mapē /system, un tos nevar pārbūvēt, piemēram, %2$s. SquashFS sistēmas attēlu var pārbūvēt tikai no nemainītiem failiem. Nekas netika mainīts.</string>
+    <string name="imp_unreadable_mbr">%1$s: nelasāma MBR nodalījumu tabula</string>
+    <string name="imp_no_system_partition_in_mbr">%1$s: MBR nav sistēmas nodalījuma</string>
 </resources>

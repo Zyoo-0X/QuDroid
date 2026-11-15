@@ -224,6 +224,8 @@ open class VmActivity : ComponentActivity() {
     private var guestH = 0
     private lateinit var box: FrameLayout
     private var state by mutableStateOf(GuestVm.State.STOPPED)
+    /** the guest's adbd has initialized: shell and adb are offered before the boot is over (see GuestVm.adbdUp) */
+    private var adbdUp by mutableStateOf(false)
     /** the guest's notification LED and where the guest screen starts (the LED sits just above it) */
     private var led by mutableStateOf<app.aemu.core.Lights.Led?>(null)
     /** this system's setting "Notification light" (the settings sheet changes it while the system runs) */
@@ -242,6 +244,8 @@ open class VmActivity : ComponentActivity() {
     private var vmRoot: FrameLayout? = null
     /** the tab bar above the guest (the same bar is in the library and in every machine's window) */
     private var tabStripView: ComposeView? = null
+    /** Added for AEmulator Plus, 2026-11-12: the tab bar is folded away (full screen, the guest goes up under the camera cut-out) */
+    private var tabBarHidden by mutableStateOf(false)
     /** true in the translucent windows (VmOverlayActivity*): the machine on top in a tab of two */
     protected open val overlayVariant: Boolean get() = false
     /** the side of the screen this window covers when it shares the tab with another machine ('T','B','L','R'); null: all of it */
@@ -249,6 +253,7 @@ open class VmActivity : ComponentActivity() {
     private var dropView: SplitDropView? = null
     private var tabCloseReceiver: android.content.BroadcastReceiver? = null
     private var stateListener: ((GuestVm.State) -> Unit)? = null
+    private var adbdListener: ((Boolean) -> Unit)? = null
     private var logListener: ((String) -> Unit)? = null
     private var frameCallback: (() -> Unit)? = null
     private var ledListener: ((app.aemu.core.Lights.Led?) -> Unit)? = null
@@ -308,6 +313,7 @@ open class VmActivity : ComponentActivity() {
         if (overlayVariant) window.addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL)
         windowTurns = windowManager.defaultDisplay.rotation
         hostUi = app.aemu.AppPrefs.hostUiOptions(this)
+        tabBarHidden = app.aemu.AppPrefs.tabBarHidden(this)
         applyVmTheme()
         orientationListener = object : android.view.OrientationEventListener(this, android.hardware.SensorManager.SENSOR_DELAY_NORMAL) {
             override fun onOrientationChanged(angle: Int) {
@@ -382,6 +388,8 @@ open class VmActivity : ComponentActivity() {
             input = vm.input
             fb = if (vm.recoveryMode) app.aemu.core.RecoveryImage.fb(vm.paths) else vm.paths.fb
             if (vm.recoveryMode || vm.nativeUi) pages = 2
+            // Android 0.9 / 1.0 / 1.1: libagl pages between two halves of fb0 (the translator reports yres_virtual = 2 * yres, see LegacyFirmware.API1_TRANSLATOR)
+            if (!vm.recoveryMode && !vm.nativeUi && vm.engine == app.aemu.core.Engine.KK && vm.img.arch == app.aemu.core.GuestArch.ARM && vm.img.api in 1..2) pages = 2
             // Broadcom V3D firmware: SurfaceFlinger draws into whichever page of fb0 it panned to, not always the first
             if (!vm.recoveryMode && !vm.nativeUi && vm.img.arch == app.aemu.core.GuestArch.ARM && app.aemu.core.BroadcomGpu.v3dFirmware(vm.paths.root)) autoPages = true
         }
@@ -509,6 +517,9 @@ open class VmActivity : ComponentActivity() {
         logLines.addAll(vm.lines().takeLast(200))
         stateListener = { st: GuestVm.State -> runOnUiThread { state = st } }
         vm.onState(stateListener!!)
+        adbdUp = vm.adbdUp
+        adbdListener = { up: Boolean -> runOnUiThread { adbdUp = up } }
+        vm.onAdbd(adbdListener!!)
         vm.mic.onPermissionNeeded = { runOnUiThread { askMic.launch(android.Manifest.permission.RECORD_AUDIO) } }
         vm.cameraFeed.onPermissionNeeded = { runOnUiThread { askCamera.launch(android.Manifest.permission.CAMERA) } }
         led = vm.lights.current
@@ -563,6 +574,8 @@ open class VmActivity : ComponentActivity() {
         super.onResume()
         windowTurns = windowManager.defaultDisplay.rotation
         hostUi = app.aemu.AppPrefs.hostUiOptions(this)
+        tabBarHidden = app.aemu.AppPrefs.tabBarHidden(this) // another machine's window may have changed it
+        applyTabBar()
         applyVmTheme()
         applyCutoutBarrier()
         orientationListener?.enable()
@@ -603,8 +616,10 @@ open class VmActivity : ComponentActivity() {
     private fun applyCutoutBarrier() {
         val root = vmRoot ?: return
         val inset = if (hostUi.cutoutBarrier) cutoutInsets else androidx.core.graphics.Insets.NONE
-        // the tab bar sits at the very top of the window and takes the top cutout itself
-        root.setPadding(inset.left, 0, inset.right, inset.bottom)
+        // the tab bar sits at the very top of the window and takes the top cutout itself; with the bar folded away the guest
+        // goes up to the edge of the screen (under the camera hole) unless the cutout barrier is switched on
+        val top = if (tabBarShown() || !hostUi.cutoutBarrier) 0 else cutoutInsets.top
+        root.setPadding(inset.left, top, inset.right, inset.bottom)
         tabStripView?.setPadding(cutoutInsets.left, cutoutInsets.top, cutoutInsets.right, 0)
         updateGuestLayout?.invoke()
     }
@@ -686,6 +701,7 @@ open class VmActivity : ComponentActivity() {
             vm.resurface = null
             if (vm.onFrame === frameCallback) vm.onFrame = null
             stateListener?.let { vm.removeOnState(it) }
+            adbdListener?.let { vm.removeOnAdbd(it) }
             logListener?.let { vm.removeOnLog(it) }
             ledListener?.let { vm.lights.removeOnChange(it) }
         }
@@ -710,6 +726,7 @@ open class VmActivity : ComponentActivity() {
         VmTabStrip(
             tabs = tabs, current = vm.img.id, topInset = false, allowSplitDrag = panePos == null, inSplit = panePos != null,
             onCloseCurrent = { shutdown -> if (shutdown) stopVm() else minimizeTab() },
+            onHide = { foldTabBar(true) },
         )
     }
 
@@ -732,10 +749,23 @@ open class VmActivity : ComponentActivity() {
             else -> android.view.Gravity.NO_GRAVITY
         })
         window.setLayout(w, h)
-        // one tab bar per screen: the bottom half has none (left and right halves both touch the top)
-        tabStripView?.visibility = if (pos == 'B') android.view.View.GONE else android.view.View.VISIBLE
         dropView?.accepting = pos == null
-        updateGuestLayout?.invoke()
+        applyTabBar()
+    }
+
+    /** one tab bar per screen: the bottom half has none (left and right halves both touch the top); the person can fold it away */
+    private fun tabBarShown() = panePos != 'B' && !tabBarHidden
+
+    private fun applyTabBar() {
+        tabStripView?.visibility = if (tabBarShown()) android.view.View.VISIBLE else android.view.View.GONE
+        applyCutoutBarrier() // also fits the guest screen to the room that is left
+    }
+
+    private fun foldTabBar(hidden: Boolean) {
+        if (tabBarHidden == hidden) return
+        tabBarHidden = hidden
+        runCatching { app.aemu.AppPrefs.setTabBarHidden(applicationContext, hidden) }
+        applyTabBar()
     }
 
     /** The list of tabs changed: follow it (this machine's tab may have become a split, or stopped being one, or gone). */
@@ -803,7 +833,7 @@ open class VmActivity : ComponentActivity() {
         }
     }
 
-    private enum class Dlg { NONE, SMS, CALL, WEA, BATTERY, ADB, SHELL, DEVICE, THERMAL }
+    private enum class Dlg { NONE, SMS, CALL, WEA, BATTERY, ADB, SHELL, DEVICE, THERMAL, NETDEBUG }
 
     // position of the floating menu button; only lasts until the emulator is started again (see resetMenuOffset)
     private var menuOffset by mutableStateOf(Offset.Zero)
@@ -974,6 +1004,8 @@ open class VmActivity : ComponentActivity() {
     private fun grabFrame(px: IntArray): Boolean {
         val g = guest
         if (g.w <= 0 || g.h <= 0) return false
+        // the screen can change size while the guest boots: a recording or VNC session keeps its size, so frames of another size are skipped
+        if (px.size != g.w * g.h) return false
         if (!g.passthrough) {
             val fmt = if (vm.recoveryMode) vm.recoveryFormat else g.format
             return runCatching { app.aemu.core.Screenshot.readFrame(g.fb, g.w, g.h, fmt, g.pages, g.shownPage, px) }.getOrDefault(false)
@@ -1029,7 +1061,9 @@ open class VmActivity : ComponentActivity() {
             thread {
                 r.stop()
                 toast(getString(R.string.m_screenshot_saved, vm.img.sdcardPath.trimEnd('/') + "/Movies/" + r.file.name))
-                guestAsync("am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file://${vm.img.sdcardPath.trimEnd('/')}/Movies/${r.file.name}")
+                // the guest's media scanner needs a booted Android; a file recorded earlier is picked up by its boot scan
+                if (state == GuestVm.State.RUNNING && !vm.recoveryMode)
+                    guestAsync("am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file://${vm.img.sdcardPath.trimEnd('/')}/Movies/${r.file.name}")
             }
             return
         }
@@ -1347,6 +1381,11 @@ open class VmActivity : ComponentActivity() {
         var dialog by remember { mutableStateOf(Dlg.NONE) }
         // recovery is "running" too, but has no Android behind am/pm/settings
         val running = state == GuestVm.State.RUNNING && !vm.recoveryMode
+        // shell and adb only need the guest's adbd, which is up long before the boot is over
+        val adbReady = app.aemu.core.VmUiPolicy.adbAvailable(state.name, adbdUp, vm.recoveryMode)
+        // screenshots and recordings only read the frame that is on the screen (fb0 or the GL surface): they need no booted Android,
+        // so they work through the boot animation and in recovery too
+        val canCapture = state == GuestVm.State.BOOTING || state == GuestVm.State.RUNNING
         var seconds by remember { mutableStateOf(0L) }
         var frames by remember { mutableStateOf(0L) }
         var romNote by remember { mutableStateOf(vm.pendingNote) }
@@ -1371,6 +1410,8 @@ open class VmActivity : ComponentActivity() {
         var cardOverride by remember { mutableStateOf<Boolean?>(null) }
         LaunchedEffect(state) { if (state == GuestVm.State.RUNNING || state == GuestVm.State.FAILED || state == GuestVm.State.STOPPED) cardOverride = null }
         val cardMinimized = cardOverride ?: (drawing && state == GuestVm.State.BOOTING)
+        // with the tab bar folded away, a tiny arrow at the top right brings it back
+        val revealArrow = tabBarHidden && panePos != 'B'
         Box(Modifier.fillMaxSize()) {
             led?.takeIf { it.lit && showLed }?.let { LedIndicator(it, Modifier.align(Alignment.TopCenter)) }
             if (!showLog) skinLayout?.keys?.forEach { (button, area) -> key(button, area) { SkinKeyZone(button, area) } }
@@ -1414,6 +1455,7 @@ open class VmActivity : ComponentActivity() {
             // top menu button (hidden while the log is open so it does not cover the log toolbar); drag to move it
             // The outer box is the border: the whole screen minus the status bar and an 8dp margin. It takes no touches itself.
             if (!showLog || vm.settings.hideMenuButton) Box(Modifier.fillMaxSize().statusBarsPadding().padding(8.dp)
+                .padding(top = if (revealArrow) 16.dp else 0.dp) // the menu button stays under the arrow
                 .onSizeChanged { menuArea = it }) {
             Box(Modifier.align(Alignment.TopEnd)
                 .offset { clampMenuOffset(menuOffset).let { IntOffset(it.x.roundToInt(), it.y.roundToInt()) } }
@@ -1482,10 +1524,12 @@ open class VmActivity : ComponentActivity() {
                         enabled = running && vm.img.api >= 17, onClick = { menu = false; dialog = Dlg.DEVICE })
                     DropdownMenuItem(text = { Text(stringResource(R.string.thermal_menu)) }, leadingIcon = { Icon(Icons.Rounded.Thermostat, null) },
                         onClick = { menu = false; dialog = Dlg.THERMAL })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.m_netdebug)) }, leadingIcon = { Icon(Icons.Rounded.Lan, null) },
+                        enabled = vm.settings.netDebug, onClick = { menu = false; dialog = Dlg.NETDEBUG })
                     DropdownMenuItem(text = { Text(stringResource(R.string.m_adb)) }, leadingIcon = { Icon(Icons.Rounded.Lan, null) },
-                        enabled = running, onClick = { menu = false; dialog = Dlg.ADB })
+                        enabled = adbReady, onClick = { menu = false; dialog = Dlg.ADB })
                     DropdownMenuItem(text = { Text(stringResource(R.string.m_shell)) }, leadingIcon = { Icon(Icons.Rounded.Terminal, null) },
-                        enabled = running, onClick = { menu = false; dialog = Dlg.SHELL })
+                        enabled = adbReady, onClick = { menu = false; dialog = Dlg.SHELL })
                     if (guest.autoPages) {
                         // Broadcom V3D firmware only: how its frames are shown (see GuestScreen.fbMode); for finding out what flickers
                         var fbModeShown by remember { mutableStateOf(guest.fbMode) }
@@ -1493,13 +1537,13 @@ open class VmActivity : ComponentActivity() {
                             onClick = { guest.fbMode = (guest.fbMode + 1) % 4; fbModeShown = guest.fbMode; menu = false })
                     }
                     DropdownMenuItem(text = { Text(stringResource(R.string.m_screenshot)) }, leadingIcon = { Icon(Icons.Rounded.Screenshot, null) },
-                        enabled = running, onClick = { menu = false; screenshot() })
+                        enabled = canCapture, onClick = { menu = false; screenshot() })
                     DropdownMenuItem(text = { Text(stringResource(if (vncOn) R.string.m_vnc_stop else R.string.m_vnc)) },
                         leadingIcon = { Icon(Icons.Rounded.Cast, null) },
                         enabled = running || vncOn, onClick = { menu = false; toggleVnc() })
                     DropdownMenuItem(text = { Text(stringResource(if (recOn) R.string.m_record_stop else R.string.m_record)) },
                         leadingIcon = { Icon(Icons.Rounded.Videocam, null) },
-                        enabled = running || recOn, onClick = { menu = false; toggleRecording() })
+                        enabled = canCapture || recOn, onClick = { menu = false; toggleRecording() })
                     DropdownMenuItem(text = { Text(stringResource(R.string.m_save_logs)) }, leadingIcon = { Icon(Icons.Rounded.Download, null) },
                         onClick = { menu = false; saveLogs() })
                     DropdownMenuItem(text = { Text(stringResource(R.string.m_settings)) }, leadingIcon = { Icon(Icons.Rounded.Settings, null) },
@@ -1532,6 +1576,7 @@ open class VmActivity : ComponentActivity() {
                 Dlg.SHELL -> ShellDialog { dialog = Dlg.NONE }
                 Dlg.DEVICE -> DeviceDialog { dialog = Dlg.NONE }
                 Dlg.THERMAL -> ThermalDialog(vm.img) { dialog = Dlg.NONE }
+                Dlg.NETDEBUG -> NetDebugDialog(vm.netDebug, vm.img.id) { dialog = Dlg.NONE }
                 Dlg.NONE -> {}
             }
 
@@ -1655,6 +1700,9 @@ open class VmActivity : ComponentActivity() {
                 if (keyboardOpen && extraKeyboard) VirtualKeyboardWindow({ code, down -> vm.input.key(code, down) }, if (preOne) LegacyKeys.rows else VirtualKeyboardLayout.rows) { keyboardOpen = false }
                 if (keypadOpen && extraKeypad) KeypadWindow({ code, down -> vm.input.key(code, down) }, vm.input.homeCode) { keypadOpen = false }
             }
+
+            // the way back from the folded tab bar (drawn last, so nothing covers it)
+            if (revealArrow) TabBarRevealArrow(onShow = { foldTabBar(false) }, modifier = Modifier.align(Alignment.TopEnd))
         }
     }
 

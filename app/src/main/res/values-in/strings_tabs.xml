@@ -8,4 +8,12 @@
     <string name="tab_minimize">Ciutkan</string>
     <string name="tab_shutdown">Matikan</string>
     <string name="vm_slots_full">Semua %1$d slot mesin sedang dipakai. Matikan salah satunya dulu.</string>
+    <string name="tab_group_title">2 tab</string>
+    <string name="tab_split_failed">Mesin itu tidak dapat lagi ditambahkan ke tab ini.</string>
+    <string name="tab_drag_label">Seret ke layar untuk membagi</string>
+    <string name="tab_split_title">Pisahkan 2 tab?</string>
+    <string name="tab_split_text">Setiap mesin kembali ke tabnya sendiri. Keduanya tetap berjalan.</string>
+    <string name="tab_split_action">Pisahkan</string>
+    <string name="tab_bar_hide">Sembunyikan bilah tab</string>
+    <string name="tab_bar_show">Tampilkan bilah tab</string>
 </resources>

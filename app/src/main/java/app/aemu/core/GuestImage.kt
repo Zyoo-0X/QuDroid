@@ -27,6 +27,8 @@ data class VmSettings(
     val touchHz: Int = 60,
     /** HTTP/HTTPS-прокси с современным TLS для старых браузеров */
     val netProxy: Boolean = true,
+    /** HTTP debugger (netdebug): the guest's HTTP/HTTPS goes through a logging proxy with rules; applies at the next full VM boot */
+    val netDebug: Boolean = false,
     val lowRam: Boolean = false,
     /** How eagerly the host kills cached guest processes: a [MemoryMode] id (light, medium, aggressive). Applies at the next full VM boot. */
     val memoryMode: String = MemoryMode.DEFAULT.id,
@@ -141,6 +143,13 @@ data class VmSettings(
      */
     val disableWatchdog: Boolean = false,
     /**
+     * Android 10-13 only, off by default. system_server waits up to 60 s for the permission controller app to grant the
+     * default runtime permissions; translated x86 code on an ARM phone cannot answer in time and system_server dies
+     * ("Error granting/upgrading runtime permissions", zygote exit 137). On: services.jar is patched so the wait returns at
+     * once (see [WatchdogPatch]) and dex2oat is kept from recompiling the patched jar ([Dex2oatSkip]). Applies at the next full boot.
+     */
+    val skipPermissionWait: Boolean = false,
+    /**
      * Added for AEmulator Plus (2026-11-01). Android 14+ only, off by default. On: the engine prepares an ART boot image
      * the guest can load in place ([CcBootImage]: the firmware's image rebuilt for this runtime, or one built from
      * scratch for a firmware that ships none, as a GSI does). Off: nothing is built or patched and zygote is told to run
@@ -151,7 +160,7 @@ data class VmSettings(
     fun toJson(): JSONObject = JSONObject()
         .put("width", width).put("height", height).put("density", density)
         .put("gpu", gpu).put("hwui", hwui).put("jit", jit).put("fullDexopt", fullDexopt).put("fbHz", fbHz)
-        .put("touchHz", touchHz).put("netProxy", netProxy).put("lowRam", lowRam).put("memoryMode", memoryMode)
+        .put("touchHz", touchHz).put("netProxy", netProxy).put("netDebug", netDebug).put("lowRam", lowRam).put("memoryMode", memoryMode)
         .put("showFrame", showFrame).put("showNavBar", showNavBar)
         .put("hideMenuButton", hideMenuButton)
         .put("navButtons", NavControls.encode(NavControls.parse(navButtons)))
@@ -175,6 +184,7 @@ data class VmSettings(
         .put("wifiSignal", wifiSignal).put("wifiNeighbors", wifiNeighbors)
         .put("thermalPassthrough", thermalPassthrough).put("thermalTemp", thermalTemp ?: JSONObject.NULL)
         .put("disableWatchdog", disableWatchdog)
+        .put("skipPermissionWait", skipPermissionWait)
         .put("useArtBootImage", useArtBootImage)
 
     companion object {
@@ -288,6 +298,7 @@ data class VmSettings(
                 fbHz = o.optInt("fbHz", d.fbHz),
                 touchHz = o.optInt("touchHz", d.touchHz),
                 netProxy = o.optBoolean("netProxy", d.netProxy),
+                netDebug = o.optBoolean("netDebug", d.netDebug),
                 lowRam = o.optBoolean("lowRam", d.lowRam),
                 memoryMode = MemoryMode.parse(o.optString("memoryMode", d.memoryMode)).id,
                 showFrame = o.optBoolean("showFrame", d.showFrame),
@@ -348,6 +359,7 @@ data class VmSettings(
                 thermalPassthrough = o.optBoolean("thermalPassthrough", d.thermalPassthrough),
                 thermalTemp = if (o.has("thermalTemp") && !o.isNull("thermalTemp")) o.optInt("thermalTemp").coerceIn(ThermalSysfs.MIN_MILLI_C, ThermalSysfs.MAX_MILLI_C) else null,
                 disableWatchdog = o.optBoolean("disableWatchdog", d.disableWatchdog),
+                skipPermissionWait = o.optBoolean("skipPermissionWait", d.skipPermissionWait),
                 useArtBootImage = o.optBoolean("useArtBootImage", d.useArtBootImage),
             )
         }

@@ -114,6 +114,24 @@ object AppPrefs {
         } catch (error: Throwable) { file.failWrite(stream); throw error }
     }
 
+    /**
+     * Added for AEmulator Plus, 2026-11-12: the machine windows' tab bar is hidden (full screen, under the camera cut-out).
+     * Each machine runs in a process of its own, so this is an atomic file read on resume, like [hostUiOptions].
+     */
+    fun tabBarHidden(ctx: Context): Boolean = runCatching {
+        val file = android.util.AtomicFile(java.io.File(ctx.filesDir, "tab-bar-hidden"))
+        file.openRead().bufferedReader().use { it.readText().trim() == "1" }
+    }.getOrDefault(false)
+
+    fun setTabBarHidden(ctx: Context, hidden: Boolean) {
+        val file = android.util.AtomicFile(java.io.File(ctx.filesDir, "tab-bar-hidden"))
+        val stream = file.startWrite()
+        try {
+            stream.write((if (hidden) "1" else "0").toByteArray(Charsets.UTF_8))
+            file.finishWrite(stream)
+        } catch (error: Throwable) { file.failWrite(stream); throw error }
+    }
+
     fun language(ctx: Context): String = sp(ctx).getString("lang", "") ?: ""
     fun setLanguage(ctx: Context, tag: String) = sp(ctx).edit().putString("lang", tag).apply()
 
@@ -142,6 +160,24 @@ object AppPrefs {
     fun newHome(ctx: Context): Boolean = sp(ctx).getBoolean("new_home", true)
     fun setNewHome(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("new_home", v).apply()
 
+    /**
+     * Built-in file browser (plain file access, sorting by name / date / size, several files at once) instead of the
+     * system's document picker. On by default; the browser itself offers the system picker as a way out.
+     */
+    fun builtinBrowser(ctx: Context): Boolean = sp(ctx).getBoolean("builtin_browser", true)
+    fun setBuiltinBrowser(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("builtin_browser", v).apply()
+
+    /** The built-in browser's sort order: "name", "date" (default) or "size"; [browserSortAsc] is its direction. */
+    fun browserSort(ctx: Context): String = sp(ctx).getString("browser_sort", "date") ?: "date"
+    fun browserSortAsc(ctx: Context): Boolean = sp(ctx).getBoolean("browser_sort_asc", false)
+    fun setBrowserSort(ctx: Context, key: String, asc: Boolean) =
+        sp(ctx).edit().putString("browser_sort", key).putBoolean("browser_sort_asc", asc).apply()
+    fun browserHidden(ctx: Context): Boolean = sp(ctx).getBoolean("browser_hidden", false)
+    fun setBrowserHidden(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("browser_hidden", v).apply()
+    /** Folder the built-in browser was last in (null: the list of storages). */
+    fun browserDir(ctx: Context): String? = sp(ctx).getString("browser_dir", null)
+    fun setBrowserDir(ctx: Context, path: String?) = sp(ctx).edit().putString("browser_dir", path).apply()
+
     /** The user's arrangement of the library (order and folders) as JSON; null until something is arranged. */
     fun libraryLayout(ctx: Context): String? = sp(ctx).getString("library_layout", null)
     fun setLibraryLayout(ctx: Context, json: String) = sp(ctx).edit().putString("library_layout", json).apply()
@@ -149,9 +185,6 @@ object AppPrefs {
     fun lastUpdateCheck(ctx: Context): Long = sp(ctx).getLong("last_update_check", 0L)
     fun setLastUpdateCheck(ctx: Context, v: Long) = sp(ctx).edit().putLong("last_update_check", v).apply()
 
-    fun catalogUrl(ctx: Context): String = sp(ctx).getString("catalog_url", app.aemu.catalog.CatalogUrls.DEFAULT)
-        ?: app.aemu.catalog.CatalogUrls.DEFAULT
-    fun setCatalogUrl(ctx: Context, url: String) = sp(ctx).edit().putString("catalog_url", url).apply()
     /** Умолчания, которые получает только что импортированная система. */
     fun defaults(ctx: Context): VmSettings {
         val p = sp(ctx)

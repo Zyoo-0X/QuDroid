@@ -523,4 +523,12 @@
     <string name="phantom_open_dev">Mở Tùy chọn cho nhà phát triển</string>
     <string name="phantom_ignore">Bỏ qua</string>
     <string name="phantom_never">Không nhắc lại</string>
+    <string name="vs_netdebug">Trình gỡ lỗi HTTP</string>
+    <string name="vs_netdebug_sub">Ghi nhật ký các yêu cầu HTTP và HTTPS của máy khách và có thể trả lời hoặc thay đổi chúng (menu › Trình gỡ lỗi HTTP). Đưa một CA gỡ lỗi vào kho tin cậy của máy khách. Áp dụng ở lần khởi động đầy đủ tiếp theo.</string>
+    <string name="m_netdebug">Trình gỡ lỗi HTTP</string>
+    <string name="vs_skip_perm_wait">Bỏ qua việc chờ bộ điều khiển quyền (Android 10-13)</string>
+    <string name="vs_skip_perm_wait_sub">Dành cho firmware x86 trên điện thoại ARM, khi ứng dụng bộ điều khiển quyền quá chậm nên không phản hồi trong 60 giây và system_server bị dừng (\"Error granting/upgrading runtime permissions\"). Vá services.jar của firmware để quá trình khởi động không chờ cấp các quyền thời gian chạy mặc định; các ứng dụng cài sẵn khi đó sẽ không nhận được các quyền này lúc khởi động. dex2oat bị chặn biên dịch lại jar đã vá. Tắt đi sẽ khôi phục jar gốc. Có hiệu lực ở lần khởi động đầy đủ tiếp theo.</string>
+    <string name="catalog_download_checking">Đang kiểm tra liên kết…</string>
+    <string name="catalog_download_title">Đang tải ROM</string>
+    <string name="catalog_download_failed">Tải xuống không thành công: %1$s</string>
 </resources>

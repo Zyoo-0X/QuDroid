@@ -523,4 +523,12 @@
     <string name="phantom_open_dev">開発者向けオプションを開く</string>
     <string name="phantom_ignore">無視</string>
     <string name="phantom_never">今後は通知しない</string>
+    <string name="vs_netdebug">HTTPデバッガー</string>
+    <string name="vs_netdebug_sub">ゲストのHTTPおよびHTTPSリクエストを記録し、応答または変更できます（メニュー › HTTPデバッガー）。デバッグ用のCAをゲストの信頼ストアに追加します。次回の完全起動時に適用されます。</string>
+    <string name="m_netdebug">HTTPデバッガー</string>
+    <string name="vs_skip_perm_wait">権限コントローラーの待機をスキップ（Android 10〜13）</string>
+    <string name="vs_skip_perm_wait_sub">ARMスマートフォン上のx86ファームウェア向けです。権限コントローラーアプリの応答が60秒以内に間に合わず、system_serverが強制終了される場合（「Error granting/upgrading runtime permissions」）に使います。ファームウェアのservices.jarにパッチを当て、起動時に既定のランタイム権限の付与を待たないようにします。この場合、プリインストールアプリは起動時にそれらの権限を受け取りません。パッチ済みjarはdex2oatによる再コンパイルが行われません。オフにすると元のjarに戻ります。次回の完全起動時に有効になります。</string>
+    <string name="catalog_download_checking">リンクを確認中…</string>
+    <string name="catalog_download_title">ROMをダウンロード中</string>
+    <string name="catalog_download_failed">ダウンロードに失敗しました: %1$s</string>
 </resources>

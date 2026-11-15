@@ -528,4 +528,12 @@
     <string name="phantom_open_dev">Кушодани Имкониятҳои таҳиягар</string>
     <string name="phantom_ignore">Нодида гирифтан</string>
     <string name="phantom_never">Дигар ёдрас накунед</string>
+    <string name="vs_netdebug">Ислоҳкунаки HTTP</string>
+    <string name="vs_netdebug_sub">Дархостҳои HTTP ва HTTPS-и меҳмонро сабт мекунад ва метавонад ба онҳо ҷавоб диҳад ё онҳоро тағйир диҳад (меню › Ислоҳкунаки HTTP). CA-и ислоҳкуниро ба анбори боварии меҳмон илова мекунад. Дар оғози пурраи навбатӣ татбиқ мешавад.</string>
+    <string name="m_netdebug">Ислоҳкунаки HTTP</string>
+    <string name="vs_skip_perm_wait">Гузаштани интизории идоракунандаи иҷозатҳо (Android 10–13)</string>
+    <string name="vs_skip_perm_wait_sub">Барои фирмвери x86 дар телефони ARM, ки барномаи идоракунандаи иҷозатҳо барои дар давоми 60 сония ҷавоб додан хеле суст аст ва system_server қатъ карда мешавад («Error granting/upgrading runtime permissions»). services.jar-и фирмверро ислоҳ мекунад, то боршавӣ интизори додани иҷозатҳои пешфарзи вақти иҷро нашавад; барномаҳои пешакӣ насбшуда он гоҳ ин иҷозатҳоро ҳангоми боршавӣ намегиранд. Аз нав тартиб додани jar-и ислоҳшуда аз ҷониби dex2oat манъ карда мешавад. Хомӯш кардан jar-и аслиро барқарор мекунад. Дар боршавии пурраи навбатӣ эътибор пайдо мекунад.</string>
+    <string name="catalog_download_checking">Пайванд тафтиш шуда истодааст…</string>
+    <string name="catalog_download_title">ROM боргирӣ шуда истодааст</string>
+    <string name="catalog_download_failed">Боргирӣ номуваффақ шуд: %1$s</string>
 </resources>

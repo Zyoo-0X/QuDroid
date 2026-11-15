@@ -98,11 +98,20 @@ object WatchdogPatch {
      * Patches [d] (a plain dex) in place: the Watchdog thread, and the wait for the permission controller (see
      * [PERM_METHOD]). The result is PATCHED when either changed, else ALREADY when either was patched before.
      */
-    fun patchDex(d: ByteArray): Result {
-        val rs = listOf(
-            patchOne(d, CLASS_DESC, METHOD, KILL_MARK),
-            patchOne(d, PERM_CLASS, PERM_METHOD, PERM_MARK),
+    fun patchDex(d: ByteArray): Result = patchDex(d, watchdog = true, perm = true)
+
+    /**
+     * [patchDex] with the two edits chosen separately: [watchdog] ends the Watchdog thread, [perm] makes the wait for the
+     * permission controller return at once ([PERM_METHOD]). The permission edit alone is what an Android 10-13 guest
+     * needs: there the permission controller app cannot answer within PermissionControllerManager's 60 s under qemu, and
+     * system_server dies with "Error granting/upgrading runtime permissions" whether or not the Watchdog runs.
+     */
+    fun patchDex(d: ByteArray, watchdog: Boolean, perm: Boolean): Result {
+        val rs = listOfNotNull(
+            if (watchdog) patchOne(d, CLASS_DESC, METHOD, KILL_MARK) else null,
+            if (perm) patchOne(d, PERM_CLASS, PERM_METHOD, PERM_MARK) else null,
         )
+        if (rs.isEmpty()) return Result(Outcome.ABSENT)
         for (o in listOf(Outcome.PATCHED, Outcome.ALREADY, Outcome.UNEXPECTED)) rs.firstOrNull { it.outcome == o }?.let { return it }
         return rs[0]
     }
@@ -132,11 +141,11 @@ object WatchdogPatch {
      * a scratch copy (the jar rewrite is deterministic) and compared byte for byte. True when the check itself cannot be
      * made, so that a failure here never costs a working jar.
      */
-    fun isStockPlusPatch(jar: File, stock: File): Boolean {
+    fun isStockPlusPatch(jar: File, stock: File, watchdog: Boolean = true, perm: Boolean = true): Boolean {
         val tmp = File(jar.parentFile, jar.name + ".aemu-chk")
         return try {
             stock.copyTo(tmp, overwrite = true)
-            patchJar(tmp, null)
+            patchJar(tmp, null) { patchDex(it, watchdog, perm) }
             tmp.readBytes().contentEquals(jar.readBytes())
         } catch (e: Exception) {
             true

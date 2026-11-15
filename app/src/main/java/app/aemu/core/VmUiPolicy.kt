@@ -11,6 +11,13 @@ internal object VmUiPolicy {
     fun active(state: String) = state in setOf("PREPARING", "BOOTING", "RUNNING")
 
     /**
+     * Modified for AEmulator Plus (2026-11-15). Shell and adb need the guest's adbd, not a finished boot: offered from the moment adbd has initialized, through BOOTING
+     * (a boot that hangs is when a shell is wanted) and RUNNING. Never in recovery, which has no Android behind am/pm/settings.
+     */
+    fun adbAvailable(state: String, adbdUp: Boolean, recovery: Boolean) =
+        adbdUp && !recovery && (state == "BOOTING" || state == "RUNNING")
+
+    /**
      * Keeps the floating menu button on screen. The button rests in the top-right corner of the usable area
      * (offset 0,0) and is dragged from there, so it may only travel left by `area - button` and down by
      * `area - button`; right and up of the resting spot is the screen edge. Returns the offset to use.

@@ -10,10 +10,10 @@ import java.security.MessageDigest
 
 /**
  * The stock system partition image of a VM whose /system is SquashFS (as in the block OTAs of several Motorola
- * devices). A SquashFS image holds compressed data and cannot be rebuilt bit for bit from the extracted files the way
- * an ext4 one can ([SystemLayout]), so the image of the full OTA is kept next to the VM's files, as it was when the
- * transfer list built it. A later block-based (delta) OTA is run on a copy of it, and the files of the VM are then
- * brought in line with the updated image, which replaces the kept one.
+ * devices), kept as a copy. New imports no longer do this: they record a [SquashLayout] and rebuild the image from it
+ * and the files, like an ext4 one ([SystemLayout]). A copy is only kept if the layout cannot be recorded, and VMs
+ * imported before keep the one they have. A later block-based (delta) OTA is run on a copy of it, and the files of the
+ * VM are then brought in line with the updated image, which replaces the kept one.
  */
 object StockImage {
     const val NAME = "system.base.img"
@@ -30,20 +30,20 @@ object StockImage {
     class Entry(val size: Long, val sha1: String)
 
     /**
-     * Walks the SquashFS image [image] without extracting it. For every regular file [onFile] gets the path (relative
-     * to /system, no leading slash), the permission bits, the size, the SHA-1 and - if [tmpFor] is given - the temporary
-     * file that received the content ([tmpFor] is asked for it once per file; the caller keeps or deletes it).
+     * The visitor that [scan] uses: for every regular file [onFile] gets the path (relative to /system, no leading
+     * slash), the permission bits, the size, the SHA-1 and - if [tmpFor] is given - the temporary file that received
+     * the content ([tmpFor] is asked for it once per file; the caller keeps or deletes it). Other readers of a SquashFS
+     * image ([SquashLayout.capture]) take it too, to do their own work and this in one pass.
      */
-    fun scan(
-        image: File,
+    fun visitor(
         tmpFor: (() -> File)?,
         progress: (Msg) -> Unit,
         onFile: (path: String, mode: Int, size: Long, sha1: String, tmp: File?) -> Unit,
         onLink: (path: String, target: String) -> Unit,
         onDir: (path: String, mode: Int) -> Unit,
-    ) {
+    ): FirmwareToolset.SquashVisitor {
         var count = 0
-        FirmwareToolset.walkSquashFs(image, { }, object : FirmwareToolset.SquashVisitor {
+        return object : FirmwareToolset.SquashVisitor {
             private var md: MessageDigest? = null
             private var tmp: File? = null
             private var mode = 0
@@ -68,6 +68,18 @@ object StockImage {
                 onFile(path, mode, size, SystemLayout.hex(md!!.digest()), tmp)
                 tmp = null
             }
-        })
+        }
+    }
+
+    /** Walks the SquashFS image [image] without extracting it, see [visitor]. */
+    fun scan(
+        image: File,
+        tmpFor: (() -> File)?,
+        progress: (Msg) -> Unit,
+        onFile: (path: String, mode: Int, size: Long, sha1: String, tmp: File?) -> Unit,
+        onLink: (path: String, target: String) -> Unit,
+        onDir: (path: String, mode: Int) -> Unit,
+    ) {
+        FirmwareToolset.walkSquashFs(image, { }, visitor(tmpFor, progress, onFile, onLink, onDir))
     }
 }

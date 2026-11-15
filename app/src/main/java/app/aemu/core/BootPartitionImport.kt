@@ -27,9 +27,7 @@ internal object BootPartitionImport {
                 !Files.exists(File(paths.root, "init.rc").toPath(), NOFOLLOW_LINKS)) { "Conflicting boot path" }
             require(!Files.isSymbolicLink(paths.propsTemplate.toPath())) { "Unsafe property template" }
             for (dir in listOf(paths.dir, paths.root)) require(dir.isDirectory && !Files.isSymbolicLink(dir.toPath()))
-            val name = ctx.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
-                if (it.moveToFirst()) it.getString(0) else null
-            } ?: "boot.img"
+            val name = PartitionImport.displayName(ctx, uri, "boot.img")
             val bytes = (ctx.contentResolver.openInputStream(uri) ?: localizedError("Cannot open boot image", R.string.err_cannot_open_boot_image)).use {
                 BootPartitionSource.read(it, name, ctx.cacheDir)
             }

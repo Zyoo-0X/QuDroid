@@ -44,9 +44,13 @@ for L in c log dl m hardware; do
   [ -s "$T/$L.syms" ] || continue
   while read -r s; do printf "void %s(void) {}\n" "$s"; done < "$T/$L.syms" > "$T/$L.c"
   $ZIG cc $TG -nostdlib -shared -fPIC -w -Wl,-soname,lib$L.so -Wl,--build-id=none -o "$T/lib$L.so" "$T/$L.c"
-  NEED="$NEED -l$L"
+  # (ZB_BY_PATH=1: the stand-ins are named by file; zig drops a stand-in libc.so for its own when asked by -lc, and then an
+  # import that is bionic-only, such as __errno, stays unresolved)
+  if [ -n "${ZB_BY_PATH:-}" ]; then NEED="$NEED $T/lib$L.so"; else NEED="$NEED -l$L"; fi
 done
+# (the object compiled above is linked, not the source again: a link line with no -lc gets none of zig's libc headers, so a second
+# compile of the source fails on <stdlib.h> when ZB_BY_PATH=1 names the stand-ins by file)
 # (--no-as-needed: the DT_NEEDED entries are wanted even where every symbol of a library is weak)
 $ZIG cc $TG -nostdlib -shared $CF "$@" -Wl,-soname,"$SONAME" -Wl,-z,norelro -Wl,-z,now -Wl,--build-id=none -Wl,--hash-style=both \
-  -Wl,--no-undefined -Wl,-s -Wl,--no-as-needed -Wl,-z,max-page-size=4096 -L"$T" -o "$OUT" "$SRC" $NEED
+  -Wl,--no-undefined -Wl,-s -Wl,--no-as-needed -Wl,-z,max-page-size=4096 -L"$T" -o "$OUT" "$T/o.o" $NEED
 ls -l "$OUT"

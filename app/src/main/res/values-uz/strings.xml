@@ -528,4 +528,12 @@
     <string name="phantom_open_dev">Dasturchi parametrlarini ochish</string>
     <string name="phantom_ignore">Eʼtiborsiz qoldirish</string>
     <string name="phantom_never">Boshqa eslatilmasin</string>
+    <string name="vs_netdebug">HTTP nosozlagichi</string>
+    <string name="vs_netdebug_sub">Mehmonning HTTP va HTTPS soʻrovlarini qayd etadi va ularga javob berishi yoki ularni oʻzgartirishi mumkin (menyu › HTTP nosozlagichi). Mehmonning ishonchli sertifikatlar omboriga nosozlik tuzatish uchun CA qoʻshadi. Keyingi toʻliq ishga tushirishda qoʻllanadi.</string>
+    <string name="m_netdebug">HTTP nosozlagichi</string>
+    <string name="vs_skip_perm_wait">Ruxsat boshqaruvchisini kutishni oʻtkazib yuborish (Android 10–13)</string>
+    <string name="vs_skip_perm_wait_sub">ARM telefondagi x86 proshivka uchun: ruxsat boshqaruvchisi ilovasi 60 soniya ichida javob berolmaydigan darajada sekin boʻlib, system_server toʻxtatilganda (“Error granting/upgrading runtime permissions”). Proshivkaning services.jar faylini tuzatadi, shunda yuklash standart bajarilish vaqti ruxsatlari berilishini kutmaydi; oldindan oʻrnatilgan ilovalar bu ruxsatlarni yuklashda olmaydi. dex2oat tuzatilgan jar faylini qayta kompilyatsiya qila olmaydi. Oʻchirish asl jar faylini tiklaydi. Keyingi toʻliq yuklashda kuchga kiradi.</string>
+    <string name="catalog_download_checking">Havola tekshirilmoqda…</string>
+    <string name="catalog_download_title">ROM yuklab olinmoqda</string>
+    <string name="catalog_download_failed">Yuklab olib boʻlmadi: %1$s</string>
 </resources>

@@ -525,4 +525,12 @@
     <string name="phantom_open_dev">Отвори Опции за програмери</string>
     <string name="phantom_ignore">Игнорирај</string>
     <string name="phantom_never">Не потсетувај повторно</string>
+    <string name="vs_netdebug">HTTP дебагер</string>
+    <string name="vs_netdebug_sub">Ги бележи HTTP и HTTPS барањата на гостинот и може да им одговара или да ги менува (мени › HTTP дебагер). Става CA за дебагирање во складот на доверба на гостинот. Се применува при следното целосно стартување.</string>
+    <string name="m_netdebug">HTTP дебагер</string>
+    <string name="vs_skip_perm_wait">Прескокни го чекањето на контролорот на дозволи (Android 10–13)</string>
+    <string name="vs_skip_perm_wait_sub">За x86 фирмвер на ARM телефон, каде што апликацијата на контролорот на дозволи е премногу бавна да одговори за 60 s, па system_server се прекинува („Error granting/upgrading runtime permissions“). Го крпи services.jar на фирмверот за подигањето да не чека на стандардните дозволи при извршување; претходно инсталираните апликации тогаш не ги добиваат тие дозволи при подигањето. На dex2oat му се забранува повторно да го компајлира крпениот jar. Исклучувањето го враќа оригиналниот jar. Важи при следното целосно подигање.</string>
+    <string name="catalog_download_checking">Проверка на врската…</string>
+    <string name="catalog_download_title">Преземање на ROM</string>
+    <string name="catalog_download_failed">Преземањето не успеа: %1$s</string>
 </resources>

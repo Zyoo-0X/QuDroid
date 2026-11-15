@@ -28,6 +28,13 @@ class PropService(private val paths: VmPaths, private val log: (String) -> Unit)
         din.readFully(body, 0, 4)
         val b = ByteBuffer.wrap(body).order(ByteOrder.LITTLE_ENDIAN)
         val cmd = b.getInt()
+        // Added for AEmulator Plus (2026-11-15): the libcutils of pre-1.0 builds has no shared property area; it asks this
+        // socket (cmd 2 = get, 3 = set, 6 = list) and waits for the answer. Without it the runtime could not read
+        // runtime.vm (jam / dalvik), and the 12-byte request below was waited on for 128 bytes that never came.
+        if (LegacyPropProtocol.isLegacyCmd(cmd)) {
+            LegacyPropProtocol.serve(c.inputStream, c.outputStream, cmd, { name -> get(name) }, { name, value -> apply(name, value) }, log)
+            return@UnixServer
+        }
         if (cmd == 0x00020001) {
             // protocol 2 (8.0+, taken when ro.property_service.version is 2): lengths before the name and the value,
             // so a name may be longer than 31 characters, and the client waits for a result

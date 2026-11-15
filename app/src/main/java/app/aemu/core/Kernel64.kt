@@ -672,6 +672,11 @@ enum class Kernel64(
     /** Guest files only a generic system image gets (it has no vendor side: no health HAL, which BatteryService of
      *  14 waits for). A kernel may have none. */
     val gsiAssets: String get() = "engines/n64-$tag-gsi"
+    /** Modified for AEmulator Plus (2026-11-15). Guest files for a build whose libui takes a graphics mapper of version 4 or 5 only
+     *  (Gralloc5: the engine's stable-C mapper and AIDL allocator, native/gralloc5), laid over the others by the tree fixer when the
+     *  tree's libui is such a one. Android 17 has them in its base layer; for the releases before, a build of the release may need
+     *  them or not, so they are a layer of their own. A kernel may have none. */
+    val gralloc5Assets: String get() = "engines/n64-$tag-gralloc5"
 
     companion object {
         /** A release nobody has brought up yet runs on the nearest older kernel. */

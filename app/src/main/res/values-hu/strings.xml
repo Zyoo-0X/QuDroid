@@ -526,4 +526,12 @@
     <string name="phantom_open_dev">Fejlesztői beállítások megnyitása</string>
     <string name="phantom_ignore">Mellőzés</string>
     <string name="phantom_never">Ne emlékeztess többé</string>
+    <string name="vs_netdebug">HTTP-hibakereső</string>
+    <string name="vs_netdebug_sub">Naplózza a vendég HTTP- és HTTPS-kéréseit, és válaszolhat rájuk vagy módosíthatja őket (menü › HTTP-hibakereső). Hibakereső CA-t helyez a vendég megbízható tanúsítványtárába. A következő teljes indításkor lép érvénybe.</string>
+    <string name="m_netdebug">HTTP-hibakereső</string>
+    <string name="vs_skip_perm_wait">Az engedélyvezérlőre várakozás kihagyása (Android 10–13)</string>
+    <string name="vs_skip_perm_wait_sub">x86-os firmware-hez ARM-os telefonon, ahol az engedélyvezérlő alkalmazás túl lassú ahhoz, hogy 60 s-on belül válaszoljon, és a system_server leáll („Error granting/upgrading runtime permissions”). Módosítja a firmware services.jar fájlját, hogy az indítás ne várjon az alapértelmezett futásidejű engedélyek megadására; az előre telepített alkalmazások így indításkor nem kapják meg ezeket az engedélyeket. A dex2oat nem fordíthatja újra a módosított jar-t. A kikapcsolás visszaállítja az eredeti jar-t. A következő teljes indításkor lép érvénybe.</string>
+    <string name="catalog_download_checking">Hivatkozás ellenőrzése…</string>
+    <string name="catalog_download_title">ROM letöltése</string>
+    <string name="catalog_download_failed">A letöltés sikertelen: %1$s</string>
 </resources>

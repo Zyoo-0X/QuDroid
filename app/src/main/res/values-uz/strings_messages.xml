@@ -232,4 +232,7 @@
     <string name="update_err_wrong_variant">Yangilanish APK’si ushbu ilova variantiga mos kelmaydi</string>
     <string name="update_err_wrong_package">Yuklab olingan APK notoʻgʻri ilova paketiga ega</string>
     <string name="catalog_err_too_many_lines">Katalog 10000 qatordan oshadi</string>
+    <string name="ota_squash_files_modified">/system ichidagi %1$d ta faylni ilova yoki siz oʻzgartirgansiz va ularni qayta qurib boʻlmaydi, masalan %2$s. SquashFS tizim tasvirini faqat oʻzgartirilmagan fayllardan qayta qurish mumkin. Hech narsa oʻzgartirilmadi.</string>
+    <string name="imp_unreadable_mbr">%1$s: MBR boʻlimlar jadvalini oʻqib boʻlmadi</string>
+    <string name="imp_no_system_partition_in_mbr">%1$s: MBR ichida tizim boʻlimi yoʻq</string>
 </resources>

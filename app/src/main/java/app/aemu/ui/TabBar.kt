@@ -9,16 +9,23 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -133,6 +140,7 @@ internal fun rememberVmTabs(): State<List<TabRegistry.Tab>> {
  * The close button of a tab of two machines splits it back into two tabs (nothing is closed). That question, and any question
  * asked from a window that is half of a split ([inSplit]), is a window of its own over the whole screen (TabDialogActivity):
  * a dialog of one half would be under the other.
+ * With [onHide] a tiny arrow sits at the right end of the bar; it hides the bar (see [TabBarRevealArrow] for the way back).
  */
 @Composable
 internal fun VmTabStrip(
@@ -143,6 +151,7 @@ internal fun VmTabStrip(
     allowSplitDrag: Boolean = false,
     inSplit: Boolean = false,
     onCloseCurrent: ((shutdown: Boolean) -> Unit)? = null,
+    onHide: (() -> Unit)? = null,
 ) {
     val ctx = LocalContext.current
     val view = LocalView.current
@@ -151,55 +160,66 @@ internal fun VmTabStrip(
 
     Surface(modifier.fillMaxWidth(), color = cs.surfaceContainer) {
         Column(if (topInset) Modifier.statusBarsPadding() else Modifier) {
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 12.dp, vertical = 4.dp).animateContentSize(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                // the library: an icon only, kept small
-                FilterChip(
-                    selected = current == null,
-                    onClick = { if (current != null) TabNav.openHome(ctx) },
-                    label = { Icon(Icons.Rounded.Home, stringResource(R.string.tab_home), Modifier.size(FilterChipDefaults.IconSize)) },
-                )
-                for (tab in tabs) {
-                    val selected = current != null && current in tab.ids
-                    val dragName = tab.names[0]
-                    val dragBg = cs.secondaryContainer.toArgb()
-                    val dragFg = cs.onSecondaryContainer.toArgb()
-                    val dragModifier = if (allowSplitDrag && !tab.isGroup && !selected) {
-                        // press, hold and drag onto the screen: the tab's machine goes next to this window's
-                        Modifier.pointerInput(tab.id) {
-                            detectDragGesturesAfterLongPress(
-                                onDragStart = { DragTab.start(view, tab.id, TabRegistry.shortName(dragName), dragBg, dragFg) },
-                                onDrag = { _, _ -> },
-                                onDragEnd = {},
-                                onDragCancel = {},
-                            )
-                        }
-                    } else Modifier
-                    InputChip(
-                        selected = selected,
-                        onClick = { if (!selected) TabNav.openTab(ctx, tab) },
-                        modifier = dragModifier,
-                        label = {
-                            Text(
-                                if (tab.isGroup) stringResource(R.string.tab_group_title) else TabRegistry.shortName(tab.names[0]),
-                                maxLines = 1, softWrap = false,
-                            )
-                        },
-                        trailingIcon = {
-                            // the chip itself switches to the tab; only this icon closes it
-                            Box(
-                                Modifier.size(24.dp).clip(CircleShape)
-                                    .clickable { if (tab.isGroup || inSplit) TabDialogActivity.open(ctx, tab.id) else closing = tab },
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(Icons.Rounded.Close, stringResource(if (tab.isGroup) R.string.tab_split_action else R.string.tab_close), Modifier.size(InputChipDefaults.IconSize))
-                            }
-                        },
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier.weight(1f).horizontalScroll(rememberScrollState())
+                        .padding(start = 12.dp, top = 4.dp, bottom = 4.dp, end = if (onHide == null) 12.dp else 4.dp).animateContentSize(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    // the library: an icon only, kept small
+                    FilterChip(
+                        selected = current == null,
+                        onClick = { if (current != null) TabNav.openHome(ctx) },
+                        label = { Icon(Icons.Rounded.Home, stringResource(R.string.tab_home), Modifier.size(FilterChipDefaults.IconSize)) },
                     )
+                    for (tab in tabs) {
+                        val selected = current != null && current in tab.ids
+                        val dragName = tab.names[0]
+                        val dragBg = cs.secondaryContainer.toArgb()
+                        val dragFg = cs.onSecondaryContainer.toArgb()
+                        val dragModifier = if (allowSplitDrag && !tab.isGroup && !selected) {
+                            // press, hold and drag onto the screen: the tab's machine goes next to this window's
+                            Modifier.pointerInput(tab.id) {
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = { DragTab.start(view, tab.id, TabRegistry.shortName(dragName), dragBg, dragFg) },
+                                    onDrag = { _, _ -> },
+                                    onDragEnd = {},
+                                    onDragCancel = {},
+                                )
+                            }
+                        } else Modifier
+                        InputChip(
+                            selected = selected,
+                            onClick = { if (!selected) TabNav.openTab(ctx, tab) },
+                            modifier = dragModifier,
+                            label = {
+                                Text(
+                                    if (tab.isGroup) stringResource(R.string.tab_group_title) else TabRegistry.shortName(tab.names[0]),
+                                    maxLines = 1, softWrap = false,
+                                )
+                            },
+                            trailingIcon = {
+                                // the chip itself switches to the tab; only this icon closes it
+                                Box(
+                                    Modifier.size(24.dp).clip(CircleShape)
+                                        .clickable { if (tab.isGroup || inSplit) TabDialogActivity.open(ctx, tab.id) else closing = tab },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(Icons.Rounded.Close, stringResource(if (tab.isGroup) R.string.tab_split_action else R.string.tab_close), Modifier.size(InputChipDefaults.IconSize))
+                                }
+                            },
+                        )
+                    }
+                }
+                if (onHide != null) {
+                    // tiny arrow, pinned to the right end: hides the bar and gives the screen to the machine
+                    Box(
+                        Modifier.padding(end = 6.dp).size(width = 28.dp, height = 24.dp).clip(CircleShape).clickable(onClick = onHide),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Rounded.KeyboardArrowUp, stringResource(R.string.tab_bar_hide), Modifier.size(18.dp), tint = cs.onSurfaceVariant)
+                    }
                 }
             }
             HorizontalDivider(color = cs.outlineVariant)
@@ -233,5 +253,25 @@ internal fun VmTabStrip(
                 }
             },
         )
+    }
+}
+
+/**
+ * The way back from the hidden tab bar: a tiny translucent arrow at the top right corner of the window, over the machine's
+ * screen. A tap shows the bar again.
+ */
+@Composable
+internal fun TabBarRevealArrow(onShow: () -> Unit, modifier: Modifier = Modifier) {
+    // a camera hole on the left or right edge (landscape) is kept clear; the top one is the very thing the arrow hangs from
+    Box(modifier.windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal)).padding(end = 8.dp)) {
+        Surface(
+            modifier = Modifier.alpha(0.7f).clip(RoundedCornerShape(bottomStart = 10.dp, bottomEnd = 10.dp)).clickable(onClick = onShow),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shape = RoundedCornerShape(bottomStart = 10.dp, bottomEnd = 10.dp),
+        ) {
+            Box(Modifier.size(width = 30.dp, height = 18.dp), contentAlignment = Alignment.Center) {
+                Icon(Icons.Rounded.KeyboardArrowDown, stringResource(R.string.tab_bar_show), Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
     }
 }

@@ -525,4 +525,12 @@
     <string name="phantom_open_dev">Hap Opsionet e zhvilluesit</string>
     <string name="phantom_ignore">Shpërfill</string>
     <string name="phantom_never">Mos ma kujto më</string>
+    <string name="vs_netdebug">Korrektuesi HTTP</string>
+    <string name="vs_netdebug_sub">Regjistron kërkesat HTTP dhe HTTPS të mysafirit dhe mund t’u përgjigjet ose t’i ndryshojë (menyja › Korrektuesi HTTP). Vendos një CA korrektimi në depon e besimit të mysafirit. Zbatohet në nisjen e plotë të radhës.</string>
+    <string name="m_netdebug">Korrektuesi HTTP</string>
+    <string name="vs_skip_perm_wait">Anashkalo pritjen e kontrolluesit të lejeve (Android 10-13)</string>
+    <string name="vs_skip_perm_wait_sub">Për firmuer x86 në telefon ARM, kur aplikacioni i kontrolluesit të lejeve është shumë i ngadaltë për të përgjigjur brenda 60 s dhe system_server mbyllet (“Error granting/upgrading runtime permissions”). Ndreq services.jar të firmuerit që nisja të mos presë dhënien e lejeve të paracaktuara gjatë ekzekutimit; aplikacionet e para-instaluara nuk i marrin pastaj ato leje gjatë nisjes. dex2oat pengohet të ricompilojë jar-in e ndryshuar. Çaktivizimi rikthen jar-in origjinal. Hyn në fuqi në nisjen e plotë të radhës.</string>
+    <string name="catalog_download_checking">Po kontrollohet lidhja…</string>
+    <string name="catalog_download_title">Po shkarkohet ROM-i</string>
+    <string name="catalog_download_failed">Shkarkimi dështoi: %1$s</string>
 </resources>

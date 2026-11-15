@@ -77,7 +77,7 @@ internal object PartitionChoice {
         return if (groupOf(withoutSlot(PartitionNames.stripOdinMd5(base)), bareOk, lz4Names) != null) plain else asSlotA(base)
     }
 
-    private val LZ4 = Regex("(?i)\\.lz4$")
+    private val LZ4 = ImageCodecs.SUFFIX
 
     private val TAR = Regex("(?i)(.+?)\\.(tar|tar\\.md5|tar\\.gz|tgz)")
 

@@ -232,4 +232,7 @@
     <string name="imp_choice_text">Ten pakiet zawiera więcej niż jeden element (%1$s): %2$d z %3$d. Wybierz ten, który chcesz zaimportować.</string>
     <string name="imp_choice_ok">Importuj</string>
     <string name="imp_choice_cancel">Anuluj import</string>
+    <string name="ota_squash_files_modified">Pliki w /system w liczbie %1$d zostały zmienione przez aplikację lub przez Ciebie i nie można ich odtworzyć, np. %2$s. Obraz systemu SquashFS można odtworzyć tylko z niezmienionych plików. Nic nie zostało zmienione.</string>
+    <string name="imp_unreadable_mbr">%1$s: nieczytelna tablica partycji MBR</string>
+    <string name="imp_no_system_partition_in_mbr">%1$s: brak partycji systemowej w MBR</string>
 </resources>
