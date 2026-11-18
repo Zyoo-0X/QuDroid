@@ -80,3 +80,43 @@ int gdl_put(void){ return 0; }
 int gdl_plane_set_int(void){ return 0; }
 int gdl_event_unregister(void){ return 0; }
 int gdl_port_pd_load(void){ return 0; }
+
+/* AEmulator Plus 2026-11-17: eglCreateWindowSurface() interposer.
+ * The Revue's SurfaceFlinger (DisplayHardware::init) does not build a FramebufferNativeWindow; it hands eglCreateWindowSurface() the
+ * id of the ISMD UI plane (7: "SurfaceFlinger using 7 for ISMD UIPlane") and Intel's PowerVR EGL turns that into a GDL plane. The
+ * software EGL that replaces it (the firmware's own libGLES_android.so) reads the argument as an ANDROID_NATIVE_WINDOW_MAGIC
+ * object (cmp [window], 'dnw_'), so window = 7 faults at address 7 and system_server dies with signal 11 right after that log line.
+ * libgdl is NEEDED by libandroid_runtime, so it sits in the global scope ahead of libEGL (which only libui, libopengl_bridge and
+ * libsurfaceflinger need) and this definition is the one every egl call site binds to. A small integer window is replaced by one
+ * FramebufferNativeWindow (libui, gralloc framebuffer /dev/graphics/fb0) made on first use; anything else, and every other process, goes
+ * straight to the real function. Only a process that has libsurfaceflinger loaded, found with dlopen(RTLD_NOLOAD) since it is loaded locally (system_server) makes the window, so mediaserver and
+ * the others never open the framebuffer a second time. All libc/libui references are weak, so processes that load libgdl without
+ * libui still start. Checked natively against the Revue's own libEGL/libui/gralloc (480x800 emulated fbdev): without this
+ * eglCreateWindowSurface(.., 7, ..) faults at address 7; with it the surface is made, eglMakeCurrent succeeds, EGL_WIDTH/HEIGHT
+ * read 480x800 and a swap posts the cleared frame to the framebuffer. Build (byte-identical recipe of the other stand-ins):
+ * gcc -m32 -O2 -ffreestanding -fno-stack-protector -nostdlib -shared -fPIC -Wl,-soname,libgdl.so -Wl,--hash-style=both */
+extern void *dlsym(void *, const char *) __attribute__((weak));
+extern void *dlopen(const char *, int) __attribute__((weak));
+extern void *_Znwj(u32) __attribute__((weak));
+extern void _ZN7android23FramebufferNativeWindowC1Ev(void *) __attribute__((weak));
+static void *aemu_fbwin;
+static volatile int aemu_fbwin_lock;
+#define AEMU_FBWIN_BYTES 0x400 /* the object is below 0x100 bytes; no code here depends on the exact size */
+void *eglCreateWindowSurface(void *dpy, void *cfg, void *win, const int *attr) {
+    void *(*real)(void *, void *, void *, const int *) = 0;
+    if (dlsym) real = dlsym((void *)-1 /* RTLD_NEXT */, "eglCreateWindowSurface");
+    if (!real && dlopen && dlsym) { void *h = dlopen("libEGL.so", 2 /* RTLD_NOW */); if (h) real = dlsym(h, "eglCreateWindowSurface"); }
+    if (!real) return 0;
+    if ((u32)win != 0 && (u32)win < 0x10000 && _Znwj && _ZN7android23FramebufferNativeWindowC1Ev && dlopen &&
+        /* libsurfaceflinger is dlopen()ed RTLD_LOCAL by libsystem_server, so RTLD_DEFAULT cannot see it; RTLD_NOLOAD can */
+        (dlopen("libsurfaceflinger.so", 1 | 4 /* RTLD_LAZY | RTLD_NOLOAD */) || dlopen("/system/lib/libsurfaceflinger.so", 1 | 4))) {
+        while (__sync_lock_test_and_set(&aemu_fbwin_lock, 1)) { }
+        if (!aemu_fbwin) {
+            unsigned char *p = (unsigned char *)_Znwj(AEMU_FBWIN_BYTES);
+            if (p) { u32 i; for (i = 0; i < AEMU_FBWIN_BYTES; i++) p[i] = 0; _ZN7android23FramebufferNativeWindowC1Ev(p); aemu_fbwin = p; }
+        }
+        __sync_lock_release(&aemu_fbwin_lock);
+        if (aemu_fbwin) win = aemu_fbwin;
+    }
+    return real(dpy, cfg, win, attr);
+}

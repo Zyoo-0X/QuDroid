@@ -5,7 +5,16 @@ import java.io.File
 
 /** Optional firmware boot media only. Never auto-restart or run charging services. */
 internal object BootMediaServices {
-    private val names = setOf("bootanim", "bootanimation", "samsungani", "playsound", LEGACY_LOGO)
+    /**
+     * Boot-sound services: `playsound` (most Samsung firmware) and `powersnd` (older Samsung init.rc files that play
+     * the power-on sound through their own service). Each is a disabled oneshot that init starts from a trigger.
+     */
+    val SOUND_SERVICES = setOf("playsound", "powersnd")
+
+    /** Binaries init's `powersnd` service is known to run, tried in this order when init.rc names none. */
+    private val POWERSND_BINARIES = listOf("samsungpowersoundplay", "powersnd")
+
+    private val names = setOf("bootanim", "bootanimation", "samsungani") + SOUND_SERVICES + LEGACY_LOGO
 
     /**
      * Samsung 2.x (Galaxy S, Froyo/Gingerbread-era firmware) has no bootanimation.zip. Its init.rc starts one
@@ -48,6 +57,8 @@ internal object BootMediaServices {
         val service = aliases.firstNotNullOfOrNull { rc.services[it] }
         val argv = service?.argv ?: when (name) {
             "playsound" -> listOf("/system/bin/playsound")
+            // the service is named powersnd, its binary is not always: Samsung's Lollipop init.rc runs samsungpowersoundplay
+            "powersnd" -> listOf(POWERSND_BINARIES.map { "/system/bin/$it" }.firstOrNull { File(root, it.trimStart('/')).isFile } ?: "/system/bin/powersnd")
             "samsungani" -> listOf("/system/bin/samsungani")
             LEGACY_LOGO -> listOf("/system/bin/$LEGACY_LOGO")
             else -> listOf(if (File(root, "system/bin/samsungani").isFile) "/system/bin/samsungani" else "/system/bin/bootanimation")
@@ -55,19 +66,26 @@ internal object BootMediaServices {
         if (argv.isEmpty() || !argv[0].startsWith('/')) return null
         val binary = File(root, argv[0].trimStart('/'))
         if (!binary.isFile || !binary.canonicalPath.startsWith(root.canonicalPath + File.separator)) return null
-        return GuestService(if (name == "playsound" || name == LEGACY_LOGO) name else "bootanim", argv,
+        return GuestService(if (name in SOUND_SERVICES || name == LEGACY_LOGO) name else "bootanim", argv,
             service?.sockets?.toMap() ?: emptyMap(), optional = true)
     }
     /** True for Samsung TouchWiz firmware (same skin test TreeFixer uses). */
     fun isTouchWiz(skin: String) = skin.contains("TouchWiz", ignoreCase = true)
 
     /**
-     * Boot media to launch proactively on TouchWiz: whichever of samsungani / playsound exist in /system/bin.
+     * Boot media to launch proactively on TouchWiz: whichever of samsungani / playsound exist in /system/bin, plus
+     * powersnd when the firmware's init declares that service (its binary name is too generic to start on a guess).
      * Anything absent is silently left out; a non-TouchWiz firmware gets nothing.
      */
-    fun touchWizBootMedia(root: File, skin: String): List<String> =
-        if (!isTouchWiz(skin)) emptyList()
-        else listOf("samsungani", "playsound").filter { File(root, "system/bin/$it").isFile }
+    fun touchWizBootMedia(root: File, skin: String): List<String> {
+        if (!isTouchWiz(skin)) return emptyList()
+        val declared = lazy { InitPlan.parse(rcFiles(root)).services.keys }
+        return listOf("samsungani", "playsound", "powersnd").filter {
+            // powersnd: init must declare the service, and whatever binary it names (or a known one) must exist
+            if (it == "powersnd") "powersnd" in declared.value && resolve(root, "powersnd") != null
+            else File(root, "system/bin/$it").isFile
+        }
+    }
 
     fun triggers(root: File, property: String, value: String): List<Pair<Boolean, String>> {
         // Deliberately not a general init trigger interpreter.

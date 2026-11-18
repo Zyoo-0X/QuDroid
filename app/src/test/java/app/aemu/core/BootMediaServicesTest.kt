@@ -57,4 +57,42 @@ class BootMediaServicesTest {
             assertEquals(base, BootMediaServices.withLegacyLogo(base, root, 19))
         } finally { root.deleteRecursively() }
     }
+    @Test fun powersndIsResolvedAndTriggered() {
+        val root = Files.createTempDirectory("powersnd").toFile()
+        try {
+            File(root, "system/bin").mkdirs()
+            File(root, "system/bin/powersnd").writeText("elf")
+            File(root, "init.rc").writeText("service powersnd /system/bin/powersnd /system/media/audio/PowerOn.ogg\n    disabled\n    oneshot\non property:service.bootanim.exit=0\n    start powersnd\non property:service.bootanim.exit=1\n    stop powersnd\n")
+            val svc = BootMediaServices.resolve(root, "powersnd")!!
+            assertEquals("powersnd", svc.name)
+            assertEquals("/system/media/audio/PowerOn.ogg", svc.argv.last())
+            assertFalse(svc.restart)
+            assertEquals(listOf(true to "powersnd"), BootMediaServices.triggers(root, "service.bootanim.exit", "0"))
+            assertEquals(listOf(false to "powersnd"), BootMediaServices.triggers(root, "service.bootanim.exit", "1"))
+            assertEquals(listOf("powersnd"), BootMediaServices.touchWizBootMedia(root, "TouchWiz"))
+            assertTrue(BootMediaServices.touchWizBootMedia(root, "AOSP").isEmpty())
+        } finally { root.deleteRecursively() }
+    }
+    @Test fun powersndNotStartedUnlessInitDeclaresIt() {
+        val root = Files.createTempDirectory("powersnd-undeclared").toFile()
+        try {
+            File(root, "system/bin").mkdirs()
+            File(root, "system/bin/powersnd").writeText("elf")
+            File(root, "init.rc").writeText("service other /system/bin/other\n")
+            assertTrue(BootMediaServices.touchWizBootMedia(root, "TouchWiz").isEmpty())
+        } finally { root.deleteRecursively() }
+    }
+    @Test fun powersndRunsSamsungPowerSoundPlayBinary() {
+        val root = Files.createTempDirectory("powersnd-sec").toFile()
+        try {
+            File(root, "system/bin").mkdirs()
+            File(root, "system/bin/samsungpowersoundplay").writeText("elf")
+            File(root, "init.rc").writeText("service powersnd /system/bin/samsungpowersoundplay\n    class main\n    user media\n    group audio\n    disabled\n    oneshot\n")
+            assertEquals(listOf("/system/bin/samsungpowersoundplay"), BootMediaServices.resolve(root, "powersnd")!!.argv)
+            assertEquals(listOf("powersnd"), BootMediaServices.touchWizBootMedia(root, "TouchWiz"))
+            File(root, "init.rc").writeText("service other /system/bin/other\n")
+            assertEquals(listOf("/system/bin/samsungpowersoundplay"), BootMediaServices.resolve(root, "powersnd")!!.argv)
+            assertTrue(BootMediaServices.touchWizBootMedia(root, "TouchWiz").isEmpty())
+        } finally { root.deleteRecursively() }
+    }
 }

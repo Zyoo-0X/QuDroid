@@ -2,12 +2,10 @@
 package app.aemu.importer.tools;
 
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
+import app.aemu.archive.NativeArc;
+import app.aemu.archive.ArcStreams;
 import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream;
 import org.apache.commons.compress.archivers.zip.ZipFile;
-import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream;
-import org.apache.commons.compress.compressors.lzma.LZMACompressorInputStream;
-import org.apache.commons.compress.compressors.xz.XZCompressorInputStream;
-import org.brotli.dec.BrotliInputStream;
 import org.anarres.lzo.LzoAlgorithm;
 import org.anarres.lzo.LzoDecompressor;
 import org.anarres.lzo.LzoLibrary;
@@ -26,7 +24,6 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.function.Consumer;
-import java.util.zip.GZIPInputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -621,7 +618,7 @@ public final class FirmwareToolset {
                 byte[] m = new byte[6];
                 raf.seek(ro); raf.readFully(m, 0, (int) Math.min(rl, 6));
                 InputStream in = new BufferedInputStream(new RangeIn(raf, ro, rl), 1 << 16);
-                if ((m[0] & 255) == 0x1f && (m[1] & 255) == 0x8b) in = new GZIPInputStream(in, 1 << 16);
+                if ((m[0] & 255) == 0x1f && (m[1] & 255) == 0x8b) in = ArcStreams.gzip(in);
                 else if (!starts(m, "070701") && !starts(m, "070702")) return null;
                 return streamContains(in, "sbin/recovery".getBytes(StandardCharsets.US_ASCII));
             } catch (Exception e) { return null; }
@@ -1264,9 +1261,9 @@ public final class FirmwareToolset {
         byte[]meta(long off)throws Exception{return metaAt(off).data;}
         byte[]decomp(byte[]raw,int expected)throws Exception{switch(compression){
             case 1:{java.util.zip.Inflater inf=new java.util.zip.Inflater();try{inf.setInput(raw);ByteArrayOutputStream o=new ByteArrayOutputStream(Math.max(expected,8192));byte[]b=new byte[8192];while(!inf.finished()){int n=inf.inflate(b);if(n>0){o.write(b,0,n);continue;}if(inf.needsDictionary())throw new IOException("SquashFS zlib needs a preset dictionary");if(inf.needsInput())break;}return o.toByteArray();}catch(java.util.zip.DataFormatException ex){throw new IOException("SquashFS zlib block is corrupt: "+ex.getMessage(),ex);}finally{inf.end();}}
-            case 2:try(InputStream in=new LZMACompressorInputStream(new ByteArrayInputStream(raw))){return in.readAllBytes();}
+            case 2:return ArcStreams.decodeAll(NativeArc.LZMA,raw,0,raw.length,expected);
             case 3:{LzoDecompressor d=LzoLibrary.getInstance().newDecompressor(LzoAlgorithm.LZO1X,null);byte[]out=new byte[Math.max(expected,1)];lzo_uintp n=new lzo_uintp(out.length);int code=d.decompress(raw,0,raw.length,out,0,n);if(code!=0)throw new IOException("SquashFS LZO error "+code);return Arrays.copyOf(out,(int)n.value);}
-            case 4:try(InputStream in=new XZCompressorInputStream(new ByteArrayInputStream(raw))){return in.readAllBytes();}
+            case 4:return ArcStreams.decodeAll(NativeArc.XZ,raw,0,raw.length,expected);
             case 5:return lz4Block(raw,expected);
             case 6:{byte[]out=new byte[Math.max(expected,1)];long n=Zstd.decompress(out,raw);if(Zstd.isError(n))throw new IOException("SquashFS Zstd error: "+Zstd.getErrorName(n));return Arrays.copyOf(out,(int)n);}
             default:throw new IOException("SquashFS compression "+compression+" is not supported");}}
@@ -1351,7 +1348,7 @@ public final class FirmwareToolset {
         static void oemAmlogic(File f,File out,Consumer<String>log)throws Exception{if(detect(f).equals("ZIP"))unzip(f,out);else genericScan(f,out,log);}
 
         static void unzip(File f,File out)throws Exception{try(ZipFile z=new ZipFile(f)){Enumeration<ZipArchiveEntry>e=z.getEntries();while(e.hasMoreElements()){ZipArchiveEntry x=e.nextElement();if(x.isDirectory())continue;File d=safeResolve(out,x.getName());d.getParentFile().mkdirs();try(InputStream in=z.getInputStream(x);OutputStream os=new FileOutputStream(d)){copy(in,os);}}}}
-        static void decompress(File f,File out,String t)throws Exception{try(InputStream in=t.equals("gz")?new GZIPInputStream(new FileInputStream(f)):t.equals("xz")?new XZCompressorInputStream(new FileInputStream(f)):new BZip2CompressorInputStream(new FileInputStream(f));OutputStream os=new FileOutputStream(out)){copy(in,os);}}
+        static void decompress(File f,File out,String t)throws Exception{try(InputStream in=t.equals("gz")?ArcStreams.gzip(new FileInputStream(f)):t.equals("xz")?ArcStreams.xz(new FileInputStream(f)):ArcStreams.bzip2(new FileInputStream(f));OutputStream os=new FileOutputStream(out)){copy(in,os);}}
         static void genericScan(File f,File out,Consumer<String>log)throws Exception{byte[]h=readHead(f,64<<10);int p=indexOf(h,"PK\u0003\u0004".getBytes(StandardCharsets.ISO_8859_1),0);if(p>0){File d=new File(out,"embedded.zip");try(RandomAccessFile r=new RandomAccessFile(f,"r")){r.seek(p);try(OutputStream os=new FileOutputStream(d)){copy(r,os,r.length()-p);}}log.accept("PKG: embedded ZIP at "+p);return;}File d=new File(out,safe(f.getName()));copy(f,d);}
     }
 
@@ -1476,7 +1473,7 @@ public final class FirmwareToolset {
             if(o.type!=0&&o.type!=1&&o.type!=8)throw new IOException("payload operation "+o.type+" requires source/delta support");
             InputStream in;
             if(o.type==0){r.seek(base+o.dataOffset);in=new InputStream(){long rem=o.dataLength;public int read(){return -1;}public int read(byte[]b,int off,int len)throws IOException{if(rem<=0)return -1;int k=(int)Math.min(rem,len);r.readFully(b,off,k);rem-=k;return k;}};}
-            else {if(o.dataLength>Integer.MAX_VALUE)throw new IOException("compressed payload op too large");r.seek(base+o.dataOffset);byte[]enc=new byte[(int)o.dataLength];r.readFully(enc);in=o.type==1?new BZip2CompressorInputStream(new ByteArrayInputStream(enc)):new XZCompressorInputStream(new ByteArrayInputStream(enc));}
+            else {if(o.dataLength>Integer.MAX_VALUE)throw new IOException("compressed payload op too large");r.seek(base+o.dataOffset);byte[]enc=new byte[(int)o.dataLength];r.readFully(enc);in=o.type==1?ArcStreams.bzip2(new ByteArrayInputStream(enc)):ArcStreams.xz(new ByteArrayInputStream(enc));}
             try(in){byte[]buf=new byte[1<<20];for(Extent e:o.dst){long rem=e.num*bs;out.seek(e.start*bs);while(rem>0){int k=(int)Math.min(rem,buf.length);int got=readUpTo(in,buf,k);if(got<k)Arrays.fill(buf,got,k,(byte)0);out.write(buf,0,k);rem-=k;}}}
         }
         static long readBe64(RandomAccessFile r)throws IOException{return ((long)readBe32(r)<<32)|(readBe32(r)&0xffffffffL);}
@@ -1659,7 +1656,7 @@ public final class FirmwareToolset {
         static File findSibling(File f,String name){File p=f.getParentFile();if(p==null)return null;File x=new File(p,name);return x.isFile()?x:null;}
         static final class PairRange{long a,b;PairRange(long x,long y){a=x;b=y;}}
     }
-    static final class OtaDatBr {static File extract(File f,File work,Consumer<String>log)throws Exception{File list=new File(f.getParentFile(),f.getName().replaceFirst("\\.br$","").replace("system.new.dat","system.transfer.list"));if(!list.isFile())throw new IOException("system.transfer.list not found");File dat=File.createTempFile("system-",".dat",work);try(InputStream in=new BrotliInputStream(new FileInputStream(f));OutputStream out=new FileOutputStream(dat)){copy(in,out);}File out=new File(work,"system.img");List<String>ls=readLines(list);if(ls.size()<2)throw new IOException("bad transfer list");long blocks=Long.parseLong(ls.get(1));int ver=Integer.parseInt(ls.get(0));int start=ver>=2?4:2;try(RandomAccessFile dst=new RandomAccessFile(out,"rw");InputStream data=new BufferedInputStream(new FileInputStream(dat))){dst.setLength(blocks*4096L);byte[]buf=new byte[4096*128];for(int i=start;i<ls.size();i++){String[]p=ls.get(i).split(" ");if(!p[0].equals("new"))throw new IOException("incremental OTA command "+p[0]+" requires OTA-specific handling already provided by Importer");if(p.length>1){String[]v=p[1].split(",");for(int j=1;j+1<v.length;j+=2){long a=Long.parseLong(v[j]),b=Long.parseLong(v[j+1]);while(a<b){int n=(int)Math.min(128,b-a);readFull(data,buf,n*4096);dst.seek(a*4096);dst.write(buf,0,n*4096);a+=n;}}}}}dat.delete();log.accept("OTA .dat.br -> "+out.getName());return out;}}
+    static final class OtaDatBr {static File extract(File f,File work,Consumer<String>log)throws Exception{File list=new File(f.getParentFile(),f.getName().replaceFirst("\\.br$","").replace("system.new.dat","system.transfer.list"));if(!list.isFile())throw new IOException("system.transfer.list not found");File dat=File.createTempFile("system-",".dat",work);try(InputStream in=ArcStreams.brotli(new FileInputStream(f));OutputStream out=new FileOutputStream(dat)){copy(in,out);}File out=new File(work,"system.img");List<String>ls=readLines(list);if(ls.size()<2)throw new IOException("bad transfer list");long blocks=Long.parseLong(ls.get(1));int ver=Integer.parseInt(ls.get(0));int start=ver>=2?4:2;try(RandomAccessFile dst=new RandomAccessFile(out,"rw");InputStream data=new BufferedInputStream(new FileInputStream(dat))){dst.setLength(blocks*4096L);byte[]buf=new byte[4096*128];for(int i=start;i<ls.size();i++){String[]p=ls.get(i).split(" ");if(!p[0].equals("new"))throw new IOException("incremental OTA command "+p[0]+" requires OTA-specific handling already provided by Importer");if(p.length>1){String[]v=p[1].split(",");for(int j=1;j+1<v.length;j+=2){long a=Long.parseLong(v[j]),b=Long.parseLong(v[j+1]);while(a<b){int n=(int)Math.min(128,b-a);readFull(data,buf,n*4096);dst.seek(a*4096);dst.write(buf,0,n*4096);a+=n;}}}}}dat.delete();log.accept("OTA .dat.br -> "+out.getName());return out;}}
 
     static int sparsePartIndex(String name){
         String n=name.toLowerCase(Locale.US);

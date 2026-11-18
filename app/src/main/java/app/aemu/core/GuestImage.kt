@@ -156,6 +156,11 @@ data class VmSettings(
      * without a boot image (imageless: slower start-up, but nothing of the image can fail). Applies at the next full VM boot.
      */
     val useArtBootImage: Boolean = false,
+    /**
+     * Android 5.0+: dex2oat is replaced by a stub that always fails, so nothing is compiled in the guest ([Dex2oatDisable]).
+     * Optional and risky (crashes, glitches, firmware that needs a boot image cannot start). Applies at the next full VM boot.
+     */
+    val disableDex2oat: Boolean = false,
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("width", width).put("height", height).put("density", density)
@@ -186,6 +191,7 @@ data class VmSettings(
         .put("disableWatchdog", disableWatchdog)
         .put("skipPermissionWait", skipPermissionWait)
         .put("useArtBootImage", useArtBootImage)
+        .put("disableDex2oat", disableDex2oat)
 
     companion object {
         const val NAV_DEFAULT = "back,home,recents,menu"
@@ -361,6 +367,7 @@ data class VmSettings(
                 disableWatchdog = o.optBoolean("disableWatchdog", d.disableWatchdog),
                 skipPermissionWait = o.optBoolean("skipPermissionWait", d.skipPermissionWait),
                 useArtBootImage = o.optBoolean("useArtBootImage", d.useArtBootImage),
+                disableDex2oat = o.optBoolean("disableDex2oat", d.disableDex2oat),
             )
         }
     }

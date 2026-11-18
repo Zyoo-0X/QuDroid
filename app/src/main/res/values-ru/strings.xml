@@ -157,6 +157,7 @@
     <string name="m_sms_body">Сообщение</string>
     <string name="m_send">Отправить</string>
     <string name="m_charging">Зарядка</string>
+    <string name="m_host_battery">Использовать батарею хоста</string>
     <string name="m_apply">Применить</string>
     <string name="m_reset">Сбросить</string>
     <string name="m_call">Входящий звонок</string>
@@ -238,6 +239,7 @@
     <string name="catalog_retry">Повторить</string>
     <string name="catalog_section_source">Открыть источник раздела</string>
     <string name="catalog_download_rom">Скачать %1$s</string>
+    <string name="catalog_share_rom">Поделиться ссылкой на %1$s</string>
     <string name="catalog_back_sections">К списку разделов</string>
     <plurals name="catalog_rom_count">
         <item quantity="one">%1$d прошивка</item>
@@ -537,4 +539,12 @@
     <string name="catalog_download_checking">Проверка ссылки…</string>
     <string name="catalog_download_title">Загрузка ROM</string>
     <string name="catalog_download_failed">Не удалось загрузить: %1$s</string>
+    <string name="m_activities">Запуск активностей</string>
+    <string name="al_title">Запуск активностей</string>
+    <string name="al_search_packages">Поиск пакетов</string>
+    <string name="al_search_activities">Поиск активностей</string>
+    <string name="al_no_packages">Пакеты не найдены</string>
+    <string name="al_no_activities">Активности не найдены</string>
+    <string name="al_not_exported">не экспортируется</string>
+    <string name="al_starting">Запуск %1$s…</string>
 </resources>

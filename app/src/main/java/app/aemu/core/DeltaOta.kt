@@ -2,6 +2,7 @@
 package app.aemu.core
 
 import app.aemu.R
+import app.aemu.archive.ArcStreams
 import android.content.Context
 import android.net.Uri
 import android.system.Os
@@ -11,7 +12,6 @@ import app.aemu.importer.BootImage
 import app.aemu.importer.ChannelSource
 import app.aemu.importer.AbLayout
 import app.aemu.importer.Ext4Reader
-import org.brotli.dec.BrotliInputStream
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
@@ -1193,7 +1193,7 @@ object DeltaOta {
         else patchFile.writeBytes(ByteArray(0))
         val newEntry = zip.getEntry(step.newData)
         var newData: InputStream = if (newEntry != null) zip.getInputStream(newEntry) else ByteArray(0).inputStream()
-        if (step.newData.endsWith(".br")) newData = BrotliInputStream(newData)
+        if (step.newData.endsWith(".br")) newData = ArcStreams.brotli(newData)
         try {
             BlockOta.apply(image, prog, newData.buffered(1 shl 20), patchFile, staging, progress)
         } finally {

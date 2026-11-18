@@ -2,7 +2,7 @@
 package app.aemu.core
 
 import app.aemu.R
-import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
+import app.aemu.archive.ArcStreams
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.DataInputStream
@@ -326,9 +326,9 @@ internal object BlockOta {
         val newSize = offtin(head, 24)
         if (ctrlLen < 0 || diffLen < 0 || newSize < 0 || 32 + ctrlLen + diffLen > len) throw OtaException("corrupt bsdiff patch", R.string.ota_corrupt_bsdiff_patch)
         if (newSize != expected) throw OtaException("a patch of the transfer list produces ${newSize} bytes, expected $expected", R.string.ota_a_patch_of_the_transfer_list, newSize, expected)
-        val ctrlS = DataInputStream(BZip2CompressorInputStream(BufferedInputStream(Slice(patch, off + 32, ctrlLen), 1 shl 16)))
-        val diffS = DataInputStream(BZip2CompressorInputStream(BufferedInputStream(Slice(patch, off + 32 + ctrlLen, diffLen), 1 shl 16)))
-        val extraS = DataInputStream(BZip2CompressorInputStream(BufferedInputStream(
+        val ctrlS = DataInputStream(ArcStreams.bzip2(BufferedInputStream(Slice(patch, off + 32, ctrlLen), 1 shl 16)))
+        val diffS = DataInputStream(ArcStreams.bzip2(BufferedInputStream(Slice(patch, off + 32 + ctrlLen, diffLen), 1 shl 16)))
+        val extraS = DataInputStream(ArcStreams.bzip2(BufferedInputStream(
             Slice(patch, off + 32 + ctrlLen + diffLen, len - 32 - ctrlLen - diffLen), 1 shl 16)))
         val ctrl = ByteArray(24)
         val a = ByteArray(1 shl 16)

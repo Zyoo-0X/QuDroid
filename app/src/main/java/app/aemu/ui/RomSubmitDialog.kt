@@ -47,6 +47,7 @@ fun SubmitRomDialog(apiBase: String, onDismiss: () -> Unit) {
     var sending by remember { mutableStateOf(false) }
     var sendError by remember { mutableStateOf<String?>(null) }
     var done by rememberSaveable { mutableStateOf(false) }
+    var notDirect by remember { mutableStateOf(false) }
 
     LaunchedEffect(apiBase, revision) {
         loadError = null
@@ -73,6 +74,8 @@ fun SubmitRomDialog(apiBase: String, onDismiss: () -> Unit) {
         sendError = null
         scope.launch {
             try {
+                // only direct links (archive.org, or a server that answers with a file) are accepted
+                if (!RomSubmitClient.isDirectFileLink(normalizedUrl)) { notDirect = true; return@launch }
                 RomSubmitClient.submit(apiBase, RomSubmission(variant.id, version.id, name.trim(), romVersion.trim(),
                     device.trim(), by.trim(), normalizedUrl, sizeBytes, emulator.trim().ifEmpty { null }, notes.trim().ifEmpty { null }))
                 done = true
@@ -86,6 +89,13 @@ fun SubmitRomDialog(apiBase: String, onDismiss: () -> Unit) {
         // Keep who/what-emulator/category: people usually submit several ROMs in a row.
         name = ""; romVersion = ""; url = ""; sizeMb = ""; notes = ""; showErrors = false; sendError = null; done = false
     }
+
+    if (notDirect) AlertDialog(
+        onDismissRequest = { notDirect = false },
+        title = { Text(stringResource(R.string.submit_not_direct_title)) },
+        text = { Text(stringResource(R.string.submit_not_direct_text)) },
+        confirmButton = { TextButton(onClick = { notDirect = false }) { Text(stringResource(R.string.ok)) } },
+    )
 
     Dialog(onDismissRequest = { if (!sending) onDismiss() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize()) {

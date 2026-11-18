@@ -2,6 +2,7 @@
 package app.aemu.importer.tools;
 
 import app.aemu.importer.tools.FirmwareToolset.Artifact;
+import app.aemu.archive.ArcStreams;
 import app.aemu.importer.tools.FirmwareToolset.Role;
 
 import java.io.BufferedInputStream;
@@ -20,7 +21,6 @@ import java.util.Map;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.zip.GZIPInputStream;
 
 /**
  * The ".dz" inside the RC4/CAB KDZ files of 2009-2010 LG phones (GW620, GT540, GM750 ... Qualcomm MSM72xx / MSM7x27).
@@ -186,7 +186,7 @@ final class LgLegacyDz {
         raw.mark(4);
         int b0 = raw.read(), b1 = raw.read();
         raw.reset();
-        if (b0 == 0x1F && b1 == 0x8B) return new GZIPInputStream(raw, 1 << 16);
+        if (b0 == 0x1F && b1 == 0x8B) return ArcStreams.gzip(raw);
         throw new IOException("entry " + e.name + " is not gzip data");
     }
 

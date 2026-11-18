@@ -95,7 +95,38 @@ class RilStub(
      * "Unrecognized RIL_RadioState: 10" (GT-I9300 4.0.4: com.android.phone restarted in a loop until the modem was
      * switched to "radio unavailable", so fake calls failed). Those builds take SIM_READY (4) as "on".
      */
-    private val radioOnState: Int get() = if (api < 14 || (samsung && api <= 15)) 4 else 10
+    private val radioOnState: Int get() = onStates[onIdx % onStates.size]
+
+    /**
+     * Modified for AEmulator Plus, 2026-11-17: the value is learned. MediaTek's 4.2 RIL.java (Gionee, MT6582) also throws
+     * "Unrecognized RIL_RadioState: 10": telephony dropped the socket after every "radio on", reconnected five times in
+     * three seconds and the modem fell back to "radio unavailable", after which the phone app polled the SIM state in a
+     * loop. When the guest drops the connection right after the state was sent, the next candidate is used; the one that
+     * keeps the connection is remembered in run/radio-on-state.
+     */
+    private val onStates: IntArray = if (api < 14 || (samsung && api <= 15)) intArrayOf(4, 10, 2) else intArrayOf(10, 4, 2)
+    @Volatile private var onIdx: Int = runCatching { File(paths.bin, "radio-on-state").readText().trim().toInt() }
+        .getOrNull()?.takeIf { it in onStates.indices } ?: 0
+    @Volatile private var onSentAt = 0L
+    @Volatile private var onConfirmed = false
+
+    private fun radioOnRejected(c: LocalSocket, o: OutputStream) {
+        val sent = onSentAt
+        onSentAt = 0L
+        if (sent == 0L || out !== o && out != null) return
+        if (System.currentTimeMillis() - sent > 4000) return
+        val was = radioOnState
+        onIdx = (onIdx + 1) % onStates.size
+        log("radio: telephony dropped the connection right after radio state $was, next time state $radioOnState")
+    }
+
+    private fun radioOnAccepted() {
+        if (onConfirmed || onSentAt == 0L) return
+        if (System.currentTimeMillis() - onSentAt < 4000) return
+        onConfirmed = true
+        runCatching { File(paths.bin, "radio-on-state").writeText(onIdx.toString()) }
+        log("radio: radio state $radioOnState accepted by telephony")
+    }
 
     @Volatile private var out: OutputStream? = null
     /** fake call: number and CallState (4 incoming, 0 active); null when idle */
@@ -202,7 +233,7 @@ class RilStub(
         synchronized(connects) {
             connects.addLast(now)
             while (connects.isNotEmpty() && now - connects.first() > 60_000) connects.removeFirst()
-            if (!safeMode && connects.size > 5) {
+            if (!safeMode && connects.size > onStates.size + 4) {
                 safeMode = true
                 log("radio: telephony keeps restarting, modem switched to \"radio unavailable\"")
             }
@@ -234,9 +265,11 @@ class RilStub(
             resp.write(le(0)); resp.write(le(serial)); resp.write(le(err)); resp.write(payload)
             frame(o, resp.toByteArray())
             answered++
+            radioOnAccepted()
             if (request == RIL_REQUEST_RADIO_POWER) afterPower(o, b)
             if (request == RIL_REQUEST_ANSWER || request in HANGUPS) unsol(o, UNSOL_RESPONSE_CALL_STATE_CHANGED, ByteArray(0))
         }
+        radioOnRejected(c, o)
         if (out === o) { out = null; call = null }
     }
 
@@ -361,6 +394,7 @@ class RilStub(
     private fun afterPower(o: OutputStream, args: ByteBuffer) {
         val on = runCatching { args.position(12); args.getInt() != 0 }.getOrDefault(true)
         // 4.0+ knows only OFF/UNAVAILABLE/ON(10); 2.3 has "SIM ready" (4) instead of ON
+        if (on && !onConfirmed) onSentAt = System.currentTimeMillis()
         unsol(o, UNSOL_RADIO_STATE_CHANGED, le(if (!on) 0 else radioOnState))
         if (on) {
             if (api > 4) unsol(o, UNSOL_RESPONSE_SIM_STATUS_CHANGED, ByteArray(0))   // Cupcake RIL does not know 1019

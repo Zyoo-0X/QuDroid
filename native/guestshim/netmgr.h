@@ -33,6 +33,11 @@ static int nm_identity(int fd, struct nm_un *addr) {
 }
 static unsigned nm_pid(void) { return (unsigned)sys3(20, 0, 0, 0) & 0x7fffffff; }
 EXPORT int socket(int domain, int type, int protocol) {
+    /* kernel uevents (NETLINK_KOBJECT_UEVENT): served by the app, see uevent.h */
+    if (domain == 16 && (type & 15) == 2 && protocol == 15) {
+        long u = uev_socket(type);
+        if (u >= 0) return (int)u;
+    }
     long r = sys3(281, domain, type, protocol);
 #ifdef NETMGR_TEST_FORCE_FALLBACK
     if (domain == 16 && (type & 15) == 3 && protocol == 16) {
@@ -68,6 +73,7 @@ EXPORT int socket(int domain, int type, int protocol) {
 }
 EXPORT int bind(int fd, const void *address, unsigned size) {
     struct nm_un own;
+    if (address && size >= 2 && *(const unsigned short *)address == 16 /* AF_NETLINK */ && uev_fd(fd)) return 0;
     if (!nm_identity(fd, &own)) {
         long r = sys3(282, fd, (long)address, size);
         return r < 0 ? fail(r) : (int)r;

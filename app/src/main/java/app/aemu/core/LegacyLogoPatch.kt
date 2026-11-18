@@ -72,4 +72,43 @@ internal object LegacyLogoPatch {
             state.setReadable(true, false)
         }.onFailure { log("boot logo: cannot create the headset switch state (${it.message})") }
     }
+
+    /**
+     * Samsung's `powersnd` service (samsungpowersoundplay, Lollipop and later) reads the headset state before it plays PowerOn.ogg and,
+     * when that fails, only logs "SamsungPowerSound: earphone state reading is failed" - in a loop, with no sound. The path is the one
+     * the firmware's own program or its sound library names, so every /sys/... string in them that looks like a jack/headset switch is
+     * given a "0" (no headset), next to the usual switch nodes. qemu maps a guest path into the tree only when the file exists there.
+     */
+    fun provideEarphoneState(root: File, binary: File?, log: (String) -> Unit) {
+        runCatching {
+            val paths = LinkedHashSet<String>(listOf(
+                "sys/class/switch/h2w/state", "sys/devices/virtual/switch/h2w/state",
+                "sys/class/switch/earjack/state", "sys/devices/virtual/switch/earjack/state"))
+            val sources = ArrayList<File>()
+            if (binary != null && binary.isFile) sources += binary
+            for (d in listOf("system/lib64", "system/lib")) File(root, d).listFiles()
+                ?.filter { it.isFile && it.name.endsWith(".so") && Regex("(?i)(powersound|soundalive|audiopolicy)").containsMatchIn(it.name) && it.length() < 8_000_000 }
+                ?.let { sources += it }
+            val rx = Regex("/sys/[A-Za-z0-9_./-]+")
+            val keep = Regex("(?i)(switch|jack|earphone|earjack|headset|h2w|headphone)")
+            for (f in sources) {
+                val text = runCatching { String(f.readBytes(), Charsets.ISO_8859_1) }.getOrNull() ?: continue
+                for (m in rx.findAll(text)) {
+                    val p = m.value.trimStart('/')
+                    if (".." in p || !keep.containsMatchIn(p) || p.endsWith('/') || p.count { it == '/' } > 8) continue
+                    paths += p
+                }
+            }
+            var made = 0
+            for (rel in paths) {
+                val state = File(root, rel)
+                val parent = state.parentFile ?: continue
+                if (!parent.canonicalPath.startsWith(root.canonicalPath + File.separator)) continue
+                parent.mkdirs()
+                if (!state.isFile || state.readText() != "0\n") state.writeText("0\n")
+                state.setReadable(true, false); made++
+            }
+            log("boot sound: headset state \"0\" provided at $made paths")
+        }.onFailure { log("boot sound: cannot create the headset state (${it.message})") }
+    }
 }

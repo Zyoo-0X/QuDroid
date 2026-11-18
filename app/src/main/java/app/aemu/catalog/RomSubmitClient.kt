@@ -11,7 +11,9 @@ import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.net.HttpURLConnection
+import java.net.URI
 import java.net.URL
+import java.util.Locale
 import kotlin.coroutines.coroutineContext
 
 data class RomVersionOption(val id: Int, val name: String)
@@ -36,6 +38,7 @@ data class RomSubmission(
 /** Talks to the ROM-submission worker (`GET /api/categories`, `POST /api/submit`). */
 object RomSubmitClient {
     private const val MAX_RESPONSE_BYTES = 256 * 1024
+    private const val CHECK_UA = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
 
     suspend fun loadCategories(apiBase: String): List<RomVariantOption> = withContext(Dispatchers.IO) {
         val (code, body) = request("$apiBase/api/categories", null)
@@ -85,6 +88,49 @@ object RomSubmitClient {
             }
             else -> localizedError("HTTP $code", R.string.submit_err_server, code)
         }
+    }
+
+    /** archive.org and every subdomain of it (web.archive.org, ia800000.us.archive.org ...). */
+    fun isArchiveOrg(url: String): Boolean {
+        val host = runCatching { URI(url.trim()).host }.getOrNull()?.lowercase(Locale.ROOT)?.trimEnd('.') ?: return false
+        return host == "archive.org" || host.endsWith(".archive.org")
+    }
+
+    /**
+     * True when [url] may be submitted: an archive.org / web.archive.org link, or a link whose server answers with a file
+     * (binary, archive, attachment) rather than a page - the same test the catalog's download button uses. Redirects are
+     * followed (a share link that redirects to the file passes); only headers are read, the body is never downloaded.
+     * Throws when the server cannot be reached.
+     */
+    suspend fun isDirectFileLink(url: String): Boolean = withContext(Dispatchers.IO) {
+        var current = CatalogUrls.valid(url) ?: return@withContext false
+        if (isArchiveOrg(current)) return@withContext true
+        var hop = 0
+        while (true) {
+            coroutineContext.ensureActive()
+            val conn = URL(current).openConnection() as HttpURLConnection
+            try {
+                conn.connectTimeout = 15_000
+                conn.readTimeout = 15_000
+                conn.instanceFollowRedirects = false
+                conn.setRequestProperty("User-Agent", CHECK_UA)
+                conn.setRequestProperty("Accept", "*/*")
+                conn.setRequestProperty("Accept-Encoding", "identity")
+                val code = conn.responseCode
+                if (code in listOf(301, 302, 303, 307, 308)) {
+                    val location = conn.getHeaderField("Location") ?: return@withContext false
+                    if (++hop > 6) return@withContext false
+                    val next = CatalogUrls.valid(URL(URL(current), location).toExternalForm()) ?: return@withContext false
+                    if (current.startsWith("https:", true) && !next.startsWith("https:", true)) return@withContext false
+                    current = next
+                    if (isArchiveOrg(current)) return@withContext true
+                    continue
+                }
+                if (code != HttpURLConnection.HTTP_OK) return@withContext false
+                return@withContext RomDownloader.isFile(conn.contentType, conn.getHeaderField("Content-Disposition"), current)
+            } finally { conn.disconnect() }
+        }
+        false
     }
 
     /** GET when [json] is null, otherwise POST of that JSON body. Redirects are not followed (a POST would lose its body). */

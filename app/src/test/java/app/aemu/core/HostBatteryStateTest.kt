@@ -62,4 +62,16 @@ class HostBatteryStateTest {
             Files.delete(power.resolve("battery").toPath())
         } finally { root.deleteRecursively(); outside.deleteRecursively() }
     }
+    @Test fun ueventsLookLikeKernelPowerSupplyMessages() {
+        val events = HostBatteryState.from(43, 100, 2, 1)!!.uevents().map { String(it).split('\u0000') }
+        assertEquals(3, events.size)
+        for (e in events) {
+            assertTrue(e.contains("SUBSYSTEM=power_supply")); assertTrue(e.contains("ACTION=change"))
+            assertTrue(e.first().startsWith("change@/class/power_supply/")); assertEquals("", e.last())   // NUL terminated
+        }
+        val battery = events.first { it.contains("POWER_SUPPLY_NAME=battery") }
+        assertTrue(battery.contains("POWER_SUPPLY_CAPACITY=43")); assertTrue(battery.contains("POWER_SUPPLY_STATUS=Charging"))
+        assertTrue(events.first { it.contains("POWER_SUPPLY_NAME=ac") }.contains("POWER_SUPPLY_ONLINE=1"))
+        assertTrue(events.first { it.contains("POWER_SUPPLY_NAME=usb") }.contains("POWER_SUPPLY_ONLINE=0"))
+    }
 }

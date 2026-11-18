@@ -32,6 +32,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.ArrowDownward
@@ -42,6 +44,7 @@ import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.PhoneAndroid
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SdCard
 import androidx.compose.material.icons.rounded.Usb
 import androidx.compose.material3.Button
@@ -54,6 +57,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -69,11 +73,15 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -299,7 +307,10 @@ internal fun FileBrowserDialog(
         placesLoaded = true
         if (first) { started = true; current = start }
     }
-    fun go(dir: File?) { current = dir; AppPrefs.setBrowserDir(ctx, dir?.path) }
+    // search: filters the names in the open folder; it is cleared when another folder is opened
+    var searching by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    fun go(dir: File?) { current = dir; AppPrefs.setBrowserDir(ctx, dir?.path); searching = false; query = "" }
 
     var sortKey by remember { mutableStateOf(SortKey.of(AppPrefs.browserSort(ctx))) }
     var asc by remember { mutableStateOf(AppPrefs.browserSortAsc(ctx)) }
@@ -321,7 +332,9 @@ internal fun FileBrowserDialog(
 
     // Back is the only way the dialog asks to be dismissed (it fills the screen): first ends a selection, then one folder up, then out
     Dialog(onDismissRequest = {
-        if (selected.isNotEmpty()) selected.clear() else current?.let { go(up(it)) } ?: onDismiss()
+        if (selected.isNotEmpty()) selected.clear()
+        else if (searching) { searching = false; query = "" }
+        else current?.let { go(up(it)) } ?: onDismiss()
     }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
             Column(Modifier.fillMaxSize().safeDrawingPadding()) {
@@ -339,12 +352,33 @@ internal fun FileBrowserDialog(
                         if (dir != null) Text(dir.path, style = MaterialTheme.typography.bodySmall, maxLines = 1,
                             overflow = TextOverflow.StartEllipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                    if (granted && dir != null) IconButton(onClick = {
+                        if (searching) query = "" // a tap on the icon while searching closes the field
+                        searching = !searching
+                    }) { Icon(Icons.Rounded.Search, stringResource(R.string.fb_search)) }
                     TextButton(onClick = onSystemPicker) { Text(stringResource(R.string.fb_system_picker)) }
                 }
 
                 if (!granted) {
                     AccessPane(onGranted = { granted = FileAccess.granted(ctx) }, onSystemPicker = onSystemPicker)
                 } else {
+                    if (searching && dir != null) {
+                        val focus = remember { FocusRequester() }
+                        val focusManager = LocalFocusManager.current
+                        LaunchedEffect(Unit) { focus.requestFocus() }
+                        OutlinedTextField(
+                            value = query, onValueChange = { query = it },
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).focusRequester(focus),
+                            singleLine = true,
+                            placeholder = { Text(stringResource(R.string.fb_search_hint)) },
+                            leadingIcon = { Icon(Icons.Rounded.Search, null) },
+                            trailingIcon = if (query.isNotEmpty()) ({
+                                IconButton(onClick = { query = "" }) { Icon(Icons.Rounded.Close, stringResource(R.string.fb_clear)) }
+                            }) else null,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+                        )
+                    }
                     // sorting: tap a key to sort by it, tap it again to turn the direction round
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -367,7 +401,7 @@ internal fun FileBrowserDialog(
 
                     Box(Modifier.weight(1f).fillMaxWidth()) {
                         if (dir == null) PlacesList(places, placesLoaded) { go(it) }
-                        else FolderList(dir, multiple, sortKey, asc, hidden, selected,
+                        else FolderList(dir, multiple, sortKey, asc, hidden, query, selected,
                             onOpen = { go(it) },
                             // like a file manager: a tap imports at once, unless files are being selected; press and hold starts selecting
                             onFile = { e ->
@@ -421,7 +455,7 @@ internal fun PlacesList(places: List<Place>, loaded: Boolean, onOpen: (File) -> 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun FolderList(
-    dir: File, multiple: Boolean, key: SortKey, asc: Boolean, showHidden: Boolean,
+    dir: File, multiple: Boolean, key: SortKey, asc: Boolean, showHidden: Boolean, query: String,
     selected: List<Entry>, onOpen: (File) -> Unit, onFile: (Entry) -> Unit, onHold: (Entry) -> Unit,
 ) {
     val haptic = LocalHapticFeedback.current
@@ -438,10 +472,14 @@ private fun FolderList(
         Listing.Loading -> Centered { CircularProgressIndicator() }
         Listing.Unreadable -> Centered { Message(stringResource(R.string.fb_unreadable)) }
         is Listing.Ok -> {
-            val shown = remember(l, key, asc, showHidden) {
-                l.entries.filter { showHidden || !it.name.startsWith(".") }.sortedWith(entryComparator(key, asc))
+            val needle = query.trim()
+            val shown = remember(l, key, asc, showHidden, needle) {
+                l.entries
+                    .filter { showHidden || !it.name.startsWith(".") }
+                    .filter { needle.isEmpty() || it.name.contains(needle, ignoreCase = true) }
+                    .sortedWith(entryComparator(key, asc))
             }
-            if (shown.isEmpty()) Centered { Message(stringResource(R.string.fb_empty)) }
+            if (shown.isEmpty()) Centered { Message(stringResource(if (needle.isEmpty()) R.string.fb_empty else R.string.fb_no_matches)) }
             else LazyColumn(Modifier.fillMaxSize(), state = state) {
                 items(shown, key = { it.path }) { e ->
                     val checked = !e.isDir && selected.any { it.path == e.path }

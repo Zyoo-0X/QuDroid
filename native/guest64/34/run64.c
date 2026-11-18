@@ -359,6 +359,41 @@ static long ion_ioctl(u32 cmd, u64 arg) {
     }
 }
 
+// Added for AEmulator Plus (2026-11-18): Android 12+ Codec2 (C2Store: "Using DMABUF Heaps") no longer asks ion but the
+// DMA-BUF heap /dev/dma_heap/system, which this kernel does not have: libdmabufheap logged "Could not open DMA-BUF heap named:
+// system", every linear block failed ("cannot allocate memory at all"), and each MediaCodec (c2.android.vorbis.decoder,
+// avc, hevc ... so ExoPlayer/Media3) died in start() with NO_MEMORY. The heap is a memfd of ours like the ion device and a
+// buffer is the same kind of memfd as an ion buffer ("aemu-ionbuf"); only DMA_HEAP_IOCTL_ALLOC is answered.
+static int memfd_is(int fd, const char *want) {
+    char p[40], t[40], d[24];
+    memcpy(p, "/proc/self/fd/", 14);
+    char *n = utoa((u64)fd, d + sizeof d); memcpy(p + 14, n, slen(n) + 1);
+    long r = S4(NR_readlinkat, AT_FDCWD, p, t, sizeof t - 1);
+    if (r < 8) return 0;
+    t[r] = 0;
+    return pre(t, want);
+}
+static int is_dmaheap_fd(int fd) { return memfd_is(fd, "/memfd:aemu-dmaheap"); }
+static int is_dmabuf_fd(int fd)  { return memfd_is(fd, "/memfd:aemu-ionbuf"); }
+
+static long dmaheap_ioctl(u32 cmd, u64 arg) {
+    u32 size = (cmd >> 16) & 0x3fff;
+    if ((cmd & 0xff) != 0 || size != 24 || !arg) return -25 /*ENOTTY*/;
+    // DMA_HEAP_IOCTL_ALLOC { u64 len; u32 fd; u32 fd_flags; u64 heap_flags }
+    long fd = S2(NR_memfd_create, "aemu-ionbuf", 1 /*MFD_CLOEXEC*/);
+    if (fd < 0) return fd;
+    long r = S2(NR_ftruncate, fd, *(u64 *)arg);
+    if (r < 0) { S1(NR_close, fd); return r; }
+    ((u32 *)arg)[2] = (u32)fd;
+    return 0;
+}
+
+// DMA_BUF_IOCTL_SYNC and DMA_BUF_SET_NAME on a heap buffer: a memfd is coherent, nothing to flush and no name to keep
+static int dmabuf_noop_ioctl(u32 cmd) {
+    u32 size = (cmd >> 16) & 0x3fff, nr = cmd & 0xff;
+    return (nr == 0 && size == 8) || (nr == 1 && (size == 4 || size == 8));
+}
+
 static long fake_memfile(const char *name, const char *content, u64 len) {
     long fd = S2(NR_memfd_create, name, 1 /*MFD_CLOEXEC*/);
     if (fd < 0) return fd;
@@ -1048,6 +1083,8 @@ static long trap2(long nr, long *a, void *uc, char **pbp) {
                     return S2(NR_memfd_create, "aemu-ashmem", ((a[2] & 02000000) ? 1 : 0) | 2 /*MFD_ALLOW_SEALING*/);
                 }
                 if (seq(P(1), "/dev/ion")) return S2(NR_memfd_create, "aemu-iondev", (a[2] & 02000000) ? 1 : 0);
+                if (seq(P(1), "/dev/dma_heap/system") || seq(P(1), "/dev/dma_heap/system-uncached"))
+                    return S2(NR_memfd_create, "aemu-dmaheap", (a[2] & 02000000) ? 1 : 0);
                 if (seq(P(1), "/dev/binder") || seq(P(1), "/dev/hwbinder") || seq(P(1), "/dev/vndbinder")) return binder_open(a[2], P(1));
                 if (seq(P(1), "/dev/input/aemu-touchpad")) return input_open_at(g_pad, IN_PAD, a[2]);
                 if (seq(P(1), "/dev/input/aemu-keyboard")) return input_open_at(g_kbd, IN_KBD, a[2]);
@@ -1420,6 +1457,8 @@ static long trap2(long nr, long *a, void *uc, char **pbp) {
         if (((a[1] >> 8) & 0xff) == 'E' && is_input_fd((int)a[0])) return input_ioctl(input_kind((int)a[0]) - 1, (u32)a[1], (u64)a[2]);
         if (((u32)a[1] & 0xffffff00u) == 0x4600) return fb_ioctl((u32)a[1], (u64)a[2]);
         if (((a[1] >> 8) & 0xff) == 'b' && is_binder_fd((int)a[0])) return binder_ioctl((int)a[0], (u32)a[1], (u64)a[2]);
+        if (((a[1] >> 8) & 0xff) == 'H' && is_dmaheap_fd((int)a[0])) return dmaheap_ioctl((u32)a[1], (u64)a[2]);
+        if (((a[1] >> 8) & 0xff) == 'b' && dmabuf_noop_ioctl((u32)a[1]) && is_dmabuf_fd((int)a[0])) return 0;
         return S3(nr, a[0], a[1], a[2]);
     case NR_memfd_create: {
         // Added for AEmulator Plus (2026-11-14): ART (10+) keeps its JIT code cache in a memfd that it maps twice, a writable view

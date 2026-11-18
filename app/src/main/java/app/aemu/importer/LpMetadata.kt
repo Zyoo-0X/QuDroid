@@ -92,11 +92,13 @@ object LpMetadata {
     fun baseName(name: String): String = name.removeSuffix("_a").removeSuffix("_b")
 
     /**
-     * The logical partitions worth importing: system, vendor, system_ext, product and odm, one each. A/B images list
-     * both slots; slot "_a" wins and a "_b" copy is only used when there is no "_a" or unsuffixed one.
+     * Every logical partition of the image, one per name: system, vendor, system_ext, product and odm first (the order they are
+     * applied in), then the rest as the image lists them (cust, my_*, *_dlkm ...). A/B images list both slots; slot "_a" wins and
+     * a "_b" copy is only used when there is no "_a" or unsuffixed one.
      */
     fun pick(parts: List<Partition>): List<Partition> {
-        val wanted = listOf("system", "vendor", "system_ext", "product", "odm")
+        val first = listOf("system", "vendor", "system_ext", "product", "odm")
+        val wanted = (first + parts.map { baseName(it.name) }.filter { it !in first }).distinct()
         return wanted.mapNotNull { w ->
             parts.firstOrNull { it.name == w } ?: parts.firstOrNull { it.name == w + "_a" } ?: parts.firstOrNull { it.name == w + "_b" }
         }

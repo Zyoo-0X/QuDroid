@@ -19,8 +19,10 @@ internal object PartitionNames {
     private val BOOT = Regex("(?i)boot(\\.img|_signed(\\.img)?)|boot_a\\.(img|bin)")
     private val OEM = Regex("(?i)oem(\\.ext4)?\\.img(\\.ext4)?|oem_signed(\\.img)?|oem\\.rfs|oem_a\\.(img|bin)")
     private val VENDOR = Regex("(?i)vendor(\\.ext4)?\\.img|vendor_a\\.(img|bin)")
-    /** Partitions besides system / vendor / oem: Treble and dynamic-partition ones, and the skins' own (Xiaomi mi_ext, OPPO my_*, vivo vgc, Samsung prism / optics). */
-    private val EXTRA = Regex("(?i)(product|system_ext|odm|mi_ext|vgc|prism|optics|my_[a-z0-9]+)(_[ab])?(\\.ext4|\\.erofs|\\.f2fs)?\\.img(\\.ext4)?(\\.lz4)?")
+    /** More partitions that keep their name as the mount point (carrier / region packs, GKI module partitions). The guest asks for them by that very path. */
+    private const val EXTRA_NAMES = "cust|preload|carrier|hw_product|hw_odm|hw_country|special_preload|system_dlkm|vendor_dlkm|odm_dlkm"
+    /** Partitions besides system / vendor / oem: Treble and dynamic-partition ones, and the skins' own (Xiaomi mi_ext, OPPO my_*, vivo vgc, Samsung prism / optics, Alcatel/TCL custpack: system/build.prop is a symlink into it). */
+    private val EXTRA = Regex("(?i)(product|system_ext|odm|custpack|mi_ext|vgc|prism|optics|my_[a-z0-9]+|$EXTRA_NAMES)(_[ab])?(\\.ext4|\\.erofs|\\.f2fs)?\\.img(\\.ext4)?(\\.lz4)?")
     private val RECOVERY = Regex("(?i)recovery(\\.img|_signed(\\.img)?)(\\.lz4)?|recovery\\.(emmc|mmc)\\.win")
 
     /** The same partitions under their bare names (no extension at all); slot "_a" only, as above. */
@@ -29,7 +31,7 @@ internal object PartitionNames {
     private val OEM_BARE = Regex("(?i)oem(_a)?")
     private val VENDOR_BARE = Regex("(?i)vendor(_a)?")
     private val RECOVERY_BARE = Regex("(?i)recovery(_a)?")
-    private val EXTRA_BARE = Regex("(?i)(product|system_ext|odm|mi_ext|vgc|prism|optics|my_[a-z0-9]+)(_[ab])?")
+    private val EXTRA_BARE = Regex("(?i)(product|system_ext|odm|custpack|mi_ext|vgc|prism|optics|my_[a-z0-9]+|$EXTRA_NAMES)(_[ab])?")
 
     /** A bare-named entry smaller than this is not a partition image (a stub, a symlink's text, a script). */
     private const val MIN_BARE_SIZE = 64L * 1024
@@ -63,6 +65,14 @@ internal object PartitionNames {
     fun isOem(base: String, bareOk: Boolean = false) = d(base).let { OEM.matches(it) || bareOk && OEM_BARE.matches(it) }
     /** The optional /vendor partition (A/B and Treble devices). Only a real image name counts, never a bare "vendor" folder. */
     fun isVendor(base: String, bareOk: Boolean = false) = d(base).let { VENDOR.matches(it) || bareOk && VENDOR_BARE.matches(it) }
+    /**
+     * A dynamic-partitions container ("super.img", or a dump called just "super" / "super_a"). Its logical partitions are cut out by
+     * [Importer] once the file is read, by content (LP metadata), so only the name decides whether an archive entry is picked up at all.
+     * A bare name counts only where the caller opts in ([bareOk]), like the other partitions: a folder or a stub called "super" is no image.
+     */
+    fun isSuper(base: String, bareOk: Boolean = false) = n(base).let { SUPER.matches(it) || bareOk && SUPER_BARE.matches(it) }
+    private val SUPER = Regex("(?i)super(_a)?\\.(img|bin)")
+    private val SUPER_BARE = Regex("(?i)super(_a)?")
     fun isBoot(base: String, bareOk: Boolean = false) = n(base).let { BOOT.matches(it) || bareOk && BOOT_BARE.matches(it) }
 
     /**
@@ -77,6 +87,24 @@ internal object PartitionNames {
         val p = m.groupValues[1].lowercase()
         return if (p == "product" || p == "system_ext") "system/$p" else p
     }
+    private val LOGICAL = Regex("[a-z][a-z0-9_]{0,47}")
+    /** Names that are no partition of the guest's root: kernel / runtime directories, the boot-side partitions, the ones read elsewhere. */
+    private val RESERVED = setOf(
+        "system", "vendor", "boot", "data", "userdata", "cache", "dev", "proc", "sys", "mnt", "storage", "sdcard", "apex", "tmp", "etc", "bin", "sbin",
+        "lib", "lib64", "init", "root", "acct", "config", "d", "metadata", "misc", "recovery", "super", "vendor_boot", "init_boot", "vbmeta", "dtbo",
+    )
+
+    /**
+     * Mount point of a logical partition of a super image (a filesystem by definition), by its name without the slot suffix: the name itself
+     * (cust, my_stock, system_dlkm, ...), product / system_ext under system/. Null for a name the guest root cannot hold.
+     * Every logical partition the image has is taken as it is given; only the names above are refused.
+     */
+    fun logicalMount(base: String): String? {
+        val n = base.lowercase()
+        if (!LOGICAL.matches(n) || n in RESERVED) return null
+        return if (n == "product" || n == "system_ext") "system/$n" else n
+    }
+
     /** recovery image (optionally lz4-framed, optionally signed) or a TWRP raw recovery.*.win backup. */
     fun isRecovery(base: String, bareOk: Boolean = false) = n(base).let { RECOVERY.matches(it) || bareOk && RECOVERY_BARE.matches(it) }
 

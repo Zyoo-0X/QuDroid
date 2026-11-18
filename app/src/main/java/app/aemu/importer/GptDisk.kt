@@ -16,7 +16,7 @@ import java.nio.ByteOrder
  */
 object GptDisk {
     /** Declaration order is the order the partitions are applied in: vendor after system, which it is read on top of. */
-    enum class Kind { BOOT, VENDOR_BOOT, RECOVERY, OEM, SYSTEM, SUPER, VENDOR, GAPPS }
+    enum class Kind { BOOT, VENDOR_BOOT, RECOVERY, OEM, SYSTEM, SUPER, VENDOR, GAPPS, EXTRA }
 
     class Part(val name: String, val start: Long, val size: Long)
 
@@ -85,12 +85,16 @@ object GptDisk {
         "super" -> Kind.SUPER // dynamic partitions (Android 10+): system, vendor, product ... are logical partitions inside (LpMetadata)
         "vendor", "vendor_a" -> Kind.VENDOR
         "gapps", "gapps_a" -> Kind.GAPPS
-        else -> null
+        // product, odm, cust, preload, my_* ...: a partition of its own, kept under its own name (see PartitionNames.extraMount)
+        else -> if (PartitionNames.extraMount("$name.img") != null) Kind.EXTRA else null
     }
 
-    /** First partition of every kind, in the order boot, vendor_boot, recovery, oem, system, super, vendor, gapps. */
+    /** First partition of every kind, in the order boot, vendor_boot, recovery, oem, system, super, vendor, gapps; then every extra partition (one per mount point). */
     fun pick(parts: List<Part>): List<Pair<Kind, Part>> =
-        Kind.values().mapNotNull { k -> parts.firstOrNull { kindOf(it.name) == k }?.let { k to it } }
+        Kind.values().flatMap { k ->
+            if (k == Kind.EXTRA) parts.filter { kindOf(it.name) == k }.distinctBy { PartitionNames.extraMount(it.name + ".img") }.map { k to it }
+            else listOfNotNull(parts.firstOrNull { kindOf(it.name) == k }?.let { k to it })
+        }
 
     fun readFully(i: InputStream, b: ByteArray, off: Int, len: Int): Int {
         var got = 0

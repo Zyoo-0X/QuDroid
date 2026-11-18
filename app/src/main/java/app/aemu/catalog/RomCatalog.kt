@@ -11,7 +11,17 @@ data class RomDetails(val name: String, val romVersion: String, val versionCateg
     val fileSizeBytes: Long?, val emulatorVersion: String?, val notes: String?)
 data class CatalogRom(val device: String, val android: String, val skin: String,
     val status: Int, val comment: String, val url: String?, val details: RomDetails? = null)
-data class CatalogSection(val name: String, val comment: String, val source: String?, val roms: List<CatalogRom>)
+/** A folder inside a section (the server's "version category"). Its ROMs no longer carry the category themselves. */
+data class CatalogSubsection(val name: String, val roms: List<CatalogRom>)
+/**
+ * One variant. [roms] are the ROMs sitting directly in it (no sub category); [subsections] are its sub category
+ * folders, in the order the server sent them.
+ */
+data class CatalogSection(val name: String, val comment: String, val source: String?, val roms: List<CatalogRom>,
+    val subsections: List<CatalogSubsection> = emptyList()) {
+    /** Every ROM in the section, folders included. */
+    val romCount: Int get() = roms.size + subsections.sumOf { it.roms.size }
+}
 data class RomCatalog(val motd: String, val sections: List<CatalogSection>, val warningLines: List<Int>)
 
 object CatalogUrls {
@@ -84,7 +94,9 @@ object RomCatalogParser {
 /**
  * The worker's `GET /api/roms` payload: `{"roms":[{variant, version_category, name, rom_version, device,
  * submitted_by, download_url, file_size_bytes, emulator_version, notes, ...}]}`. One section per variant, in the
- * order the server sent them (it sorts by variant, then version number). Warning "lines" are 1-based entry numbers.
+ * order the server sent them (it sorts by variant, then version number). Each variant's `version_category` values become
+ * sub sections (folders) of that variant; a ROM without a category stays directly in the variant.
+ * Warning "lines" are 1-based entry numbers.
  */
 object RomJsonParser {
     private const val MAX_ROMS = 10_000
@@ -95,7 +107,8 @@ object RomJsonParser {
             ?: throw LocalizedIllegalArgumentException("Catalog JSON has no \"roms\" array", R.string.catalog_err_bad_json)
         if (roms.length() > MAX_ROMS) throw LocalizedIllegalArgumentException("Catalog exceeds $MAX_ROMS ROMs", R.string.catalog_err_too_many_roms)
         val warnings = linkedSetOf<Int>()
-        val bySection = LinkedHashMap<String, MutableList<CatalogRom>>()
+        // variant -> version category ("" = none) -> ROMs, everything in the order first seen
+        val bySection = LinkedHashMap<String, LinkedHashMap<String, MutableList<CatalogRom>>>()
         for (i in 0 until roms.length()) {
             val o = roms.optJSONObject(i)
             val name = o?.text("name").orEmpty()
@@ -107,8 +120,13 @@ object RomJsonParser {
             val size = if (o.isNull("file_size_bytes")) null else o.optLong("file_size_bytes", -1).takeIf { it >= 0 }
             val details = RomDetails(name, o.text("rom_version"), o.text("version_category"), o.text("submitted_by"),
                 size, o.text("emulator_version").ifEmpty { null }, o.text("notes").ifEmpty { null })
-            bySection.getOrPut(o.text("variant")) { mutableListOf() } += CatalogRom(device, "", "", -1, "", url, details)
+            bySection.getOrPut(o.text("variant")) { LinkedHashMap() }
+                .getOrPut(details.versionCategory) { mutableListOf() } += CatalogRom(device, "", "", -1, "", url, details)
         }
-        return RomCatalog("", bySection.map { (variant, list) -> CatalogSection(variant, "", null, list) }, warnings.toList())
+        val sections = bySection.map { (variant, categories) ->
+            CatalogSection(variant, "", null, categories[""].orEmpty(),
+                categories.filterKeys { it.isNotEmpty() }.map { (category, list) -> CatalogSubsection(category, list) })
+        }
+        return RomCatalog("", sections, warnings.toList())
     }
 }

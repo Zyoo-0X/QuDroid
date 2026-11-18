@@ -2,9 +2,8 @@
 package app.aemu.importer.tools;
 
 import app.aemu.importer.tools.FirmwareToolset.Artifact;
+import app.aemu.archive.ArcStreams;
 import app.aemu.importer.tools.FirmwareToolset.Role;
-import com.github.luben.zstd.ZstdInputStream;
-import org.apache.commons.compress.compressors.lz4.FramedLZ4CompressorInputStream;
 
 import java.io.BufferedInputStream;
 import java.io.File;
@@ -21,7 +20,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.function.Consumer;
-import java.util.zip.GZIPInputStream;
 import java.util.zip.Inflater;
 import java.util.zip.InflaterInputStream;
 
@@ -557,9 +555,9 @@ final class LgKdz {
             int b0 = m[0] & 255, b1 = m[1] & 255;
             InputStream in;
             if (got >= 2 && (b0 & 0x0F) == 8 && ((b0 << 8) | b1) % 31 == 0) in = new InflaterInputStream(raw, new Inflater(), 1 << 16);
-            else if (got >= 4 && b0 == 0x28 && b1 == 0xB5 && (m[2] & 255) == 0x2F && (m[3] & 255) == 0xFD) in = new ZstdInputStream(raw);
-            else if (got >= 4 && b0 == 0x04 && b1 == 0x22 && (m[2] & 255) == 0x4D && (m[3] & 255) == 0x18) in = new FramedLZ4CompressorInputStream(raw);
-            else if (got >= 2 && b0 == 0x1F && b1 == 0x8B) in = new GZIPInputStream(raw, 1 << 16);
+            else if (got >= 4 && b0 == 0x28 && b1 == 0xB5 && (m[2] & 255) == 0x2F && (m[3] & 255) == 0xFD) in = ArcStreams.zstd(raw);
+            else if (got >= 4 && b0 == 0x04 && b1 == 0x22 && (m[2] & 255) == 0x4D && (m[3] & 255) == 0x18) in = ArcStreams.lz4(raw);
+            else if (got >= 2 && b0 == 0x1F && b1 == 0x8B) in = ArcStreams.gzip(raw);
             else if (c.dataSize == c.targetSize) in = raw;              // stored
             else throw new IOException("chunk " + c.name + ": unknown compression");
             MessageDigest md;

@@ -13,14 +13,19 @@ and **Refresh**.
 ## Browsing
 
 Sections appear as a compact index, one per variant, in the order the server
-sends them. Tap a section to show only its ROMs, and use the toolbar back arrow
-or system Back to return to the index. Each section shows how many ROMs it has;
-an empty section shows **No ROMs at the moment.**
+sends them. Tap a section to open it, and use the toolbar back arrow or system
+Back to go one level up. Each section shows how many ROMs it has (sub category
+folders included); an empty section shows **No ROMs at the moment.**
+
+Inside a section, each version category is its own folder (a sub category), in
+the order the server sends them, and works like a section: tap it to see only
+its ROMs, Back returns to the section. A ROM without a version category is
+listed directly in the section, below the folders.
 
 Each ROM card shows:
 
 - the ROM name and the device;
-- the ROM version and version category;
+- the ROM version (the version category is the folder the card is in);
 - the file size and the emulator version it was tested on (when given);
 - notes (when given);
 - who submitted it.
@@ -44,6 +49,17 @@ The download icon first checks the link:
 - If it answers with a web page (HTML, text, JSON, XML), an HTTP error, or the
   check cannot be completed, the link opens in the default browser instead. If
   no default browser is set, Android offers a browser selection.
+
+Downloads run in a foreground service with a notification (progress and a
+**Cancel** action) and hold a wake lock, so they keep going when the screen
+turns off or the app is minimised. **Hide** in the download dialog closes the
+dialog and leaves the download running. Only one download runs at a time. If the
+catalog screen is not open when it ends, a notification says so: tapping
+**ROM downloaded** hands the file to the importer, and a link that turned out to
+be a web page offers to open it in the browser. Android 13 and newer need the
+notification permission to show these notifications; the download itself does
+not depend on it. A download is not resumed if the app process is killed or the
+connection drops for good.
 
 Links containing a user name or password, and non-web schemes, are never opened.
 HTTPS redirects cannot silently downgrade to HTTP.

@@ -186,8 +186,11 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
             val result = guestRunner.run(listOf("/system/bin/sh", "-c", command), 4_000)
             check(result.first == 0) { "Guest battery update failed: ${result.first}" }
         }, ::log)
+    @Volatile private var hostBatteryDefault = settings.hostBattery
     fun setManualBattery(percent: Int, charging: Boolean) = battery.applyManual(percent, charging)
-    fun resetBattery() = battery.reset(settings.hostBattery)
+    fun resetBattery() = battery.reset(hostBatteryDefault)
+    fun setHostBatteryFollowing(enabled: Boolean) { hostBatteryDefault = enabled; battery.setFollowing(enabled) }
+    val hostBatteryFollowing get() = battery.following
     val hostBatteryLevel get() = battery.latest?.percent ?: 80
     val hostBatteryCharging get() = battery.latest?.status in listOf(2, 5)
     private val motion = MotionBridge(ctx, paths, { img.api in 9..25 && engine != Engine.N64 && !recoveryMode && !nativeUi }, { settings.motionSensors }, { settings.gyroLock }, ::log)
@@ -1005,6 +1008,10 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
         }
         // ART first boot compiles every app with dex2oat under qemu (minutes, single-threaded): by default only
         // skip it (verify-none: ART verifies classes lazily when an app runs) and use several threads; "full compilation" in the settings keeps machine code
+        // Modified for AEmulator Plus (2026-11-17): our own "disable dex2oat" stub is put aside first, so that the wrappers
+        // below (and TreeFixer's) see the firmware's real file; it is put in place again after them.
+        val disableD2o = img.api >= 21 && s.disableDex2oat
+        if (Dex2oatDisable.uninstall(paths.root) && !disableD2o) log("dex2oat: original binaries put back (dex2oat is no longer disabled)")
         if (img.api >= 21) {
             // (the native arm64 engine too: dex2oat is a 32-bit program there and runs translated; the boot image is
             // still compiled in full, it has its own filter)
@@ -1035,7 +1042,8 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
         // Modified for AEmulator Plus (2026-11-01): all of it (the rebuild, the libart patch, the image built from scratch) is
         // behind the VM setting "Use ART boot image" (Android 14+, off by default). Off: nothing is built or patched and the
         // runtime is told to start without an image, see [runWithoutBootImage].
-        val bootImageOn = img.api >= 34 && s.useArtBootImage
+        // building a boot image needs the guest's dex2oat, so it is not attempted while dex2oat is disabled
+        val bootImageOn = img.api >= 34 && s.useArtBootImage && !disableD2o
         if (img.api >= 34 && !bootImageOn) runWithoutBootImage { k, v -> overrides[k] = v }
         val ccRebuild = bootImageOn && CcBootImage.pending(paths.root, img.api)
         if (ccRebuild) log("art: boot image has no read barrier: it will be rebuilt for CC before the guest starts")
@@ -1059,6 +1067,8 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
                 overrides["dalvik.vm.image-dex2oat-flags"] = "--image-classes-zip=/system/framework/aemu-imgclasses.zip --image-classes=preloaded-classes"
             }
         }
+        if (disableD2o && Dex2oatDisable.install(paths.root))
+            log("dex2oat: disabled by the VM setting (every dex2oat run fails at once; this can cause crashes, glitches and other unintended behavior)")
         // порты MIUI правят framework на smali так, что Dalvik-верификатор отвергает классы ядра
         // (зигота падает на VerifyError) — на телефонах они живут с выключенной проверкой байткода
         if (img.skin.contains("MIUI", true) && img.runtime == "dalvik") overrides["dalvik.vm.dexopt-flags"] = "v=n,o=a,m=y"
@@ -1566,6 +1576,9 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
             if (svc.name == "zygote" && needsBatteryPropertiesGuard) ensureBatteryProperties(plan)
             startService(svc)
             svc.waitSocket?.let { sock -> waitFor("socket $sock", 20_000) { paths.socket(sock).exists() } }
+            // The socket file only proves that dhdrun bound it. Do not start zygote (and with it system_server's NetdConnector)
+            // until netd itself answers, and give a netd that never does a fresh start: see NetdProbe
+            if (svc.name == "netd" && svc.waitSocket == "netd" && img.api < 29) ensureNetdServing(svc)
             if (svc.delayMs > 0) Thread.sleep(svc.delayMs)
             if (svc.name == "surfaceflinger") startTouchWizBootMedia()
             if (svc.name == "installd") watchUserZeroLink()
@@ -1705,6 +1718,8 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
     private val binderdId: String by lazy { BinderGuard.binderdId(paths.nativeBin(img.engine.binderd)) }
     private val binderGuardDone = java.util.concurrent.atomic.AtomicBoolean(false)
     @Volatile private var binderGuardAtBoot = false
+    /** the tree's ro.build.fingerprint names MocorDroid2.3.5, the only firmware the guard (and its restart) is for */
+    @Volatile private var binderGuardFirmware = false
     private var binderdLogLen = -1L
 
     /** once per boot, before any guest program starts: is the guard to be preloaded into this boot? */
@@ -1712,7 +1727,10 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
         if (engine == Engine.N64 || img.engine.binderd.isEmpty()) return
         BinderGuard.resetLog(paths.bin)
         binderGuardDone.set(false); binderdLogLen = -1L
-        val on = BinderGuard.armed(paths.bin, binderdId)
+        binderGuardFirmware = BinderGuard.firmwareMatches(paths.root)
+        // not the firmware it was made for: nothing is preloaded, even if an earlier run of this VM armed it, and the
+        // log is not read afterwards (checkBinderGuard), so it can never restart the system
+        val on = binderGuardFirmware && BinderGuard.armed(paths.bin, binderdId)
         binderGuardAtBoot = on
         runner.guardArmed = on
         runnerRef?.guardArmed = on
@@ -1730,6 +1748,7 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
      */
     private fun checkBinderGuard() {
         if (engine == Engine.N64 || img.engine.binderd.isEmpty() || binderGuardDone.get()) return
+        if (!binderGuardFirmware) return
         val f = paths.log("binderd")
         val len = f.length()
         if (!f.isFile || len == binderdLogLen) return
@@ -2001,6 +2020,9 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
             log("· ${svc.name}: ${svc.argv.first()} missing, skipping")
             return
         }
+        // Samsung's boot sound reads the headset state first and plays nothing when it cannot (see LegacyLogoPatch.provideEarphoneState)
+        if (svc.name in BootMediaServices.SOUND_SERVICES)
+            LegacyLogoPatch.provideEarphoneState(paths.root, File(paths.root, svc.argv.first().removePrefix("/")), ::log)
         // a TEE KeyMint (MediaTek/Trustonic/OP-TEE client) aborts at once without a secure world, and a keymint left declared
         // in the manifests makes keystore2 panic: the program is never started, keystore2 runs its software KeyMint
         if (engine == Engine.N64 && kernel.treble && TreeFixer.TEE_KEYMINT_SERVICE
@@ -2104,7 +2126,11 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
         // A real init starts services with cwd "/", and some firmware daemons open relative paths (MediaTek netd does
         // fopen("proc/cpuinfo")). qemu only remaps absolute guest paths, so netd must start inside the guest root,
         // otherwise the open fails, netd calls feof(NULL) and dies, and system_server then fails to start.
-        val cwd = if (name == "netd") paths.root else paths.bin
+        // Added for AEmulator Plus (2026-11-17). Samsung's boot sound (libsamsungpowersound) hands MediaPlayer a path without a leading
+        // slash ("system/media/audio/ui/PowerOn.ogg"), and mediaserver opens it relative to ITS cwd: from the bin directory that is
+        // ENOENT (the strace of mediaserver shows it), setDataSource fails, "playback complete" never arrives and powersnd loops
+        // for ever without a sound. powersnd and the media servers start in the guest root, as init runs them.
+        val cwd = if (name == "netd" || name in BootMediaServices.SOUND_SERVICES || name == "mediaserver" || name == "audioserver") paths.root else paths.bin
         val pb = ProcessBuilder(cmd).directory(cwd).redirectErrorStream(true)
         pb.environment().clear()
         pb.environment().putAll(if (env.isEmpty()) mapOf("PATH" to "/system/bin") else env)
@@ -2321,6 +2347,31 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
         log("✖ batteryproperties is still missing, system_server will fail in BatteryService; healthd command: ${hd.argv.joinToString(" ")}")
     }
 
+    /**
+     * Added for AEmulator Plus (2026-11-17). Returns once netd answers a command; a netd that stays silent is killed and
+     * started again (its socket is re-bound by dhdrun), up to [attempts] times. After the last attempt the boot goes on as
+     * it always did, so a netd that cannot be fixed costs the wait and nothing more.
+     */
+    private fun ensureNetdServing(svc: GuestService, attempts: Int = 3, perAttemptMs: Long = 15_000) {
+        val sock = paths.socket("netd")
+        val t0 = SystemClock.uptimeMillis()
+        for (n in 1..attempts) {
+            if (stopping) return
+            if (NetdProbe.waitServing(sock, perAttemptMs, stopped = { stopping })) {
+                log("netd answers (attempt $n, ${SystemClock.uptimeMillis() - t0} ms after its start)")
+                return
+            }
+            if (stopping) return
+            if (n == attempts) break
+            log("⚠ netd did not answer within ${perAttemptMs / 1000} s (attempt $n of $attempts): starting it again")
+            // (killed by us: exit 137 is not restarted by the watcher, so the one start below is the only one)
+            synchronized(procs) { procs.remove("netd") }?.let { runCatching { it.destroyForcibly().waitFor() } }
+            startService(svc)
+            waitFor("socket netd", 20_000) { paths.socket("netd").exists() }
+        }
+        log("⚠ netd never answered ${SystemClock.uptimeMillis() - t0} ms after its start; booting on (ConnectivityService may fail)")
+    }
+
     private fun waitFor(what: String, ms: Long, cond: () -> Boolean): Boolean {
         val until = SystemClock.uptimeMillis() + ms
         while (SystemClock.uptimeMillis() < until && !stopping) {
@@ -2500,9 +2551,56 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
 
     @Volatile private var legacyBootObservers: List<android.os.FileObserver> = emptyList()
 
+    /** Generation of the BOOT_COMPLETED log poller; bumping it stops the running poller thread. */
+    private val legacyBootLogGen = java.util.concurrent.atomic.AtomicInteger()
+
     private fun stopLegacyBootWatch() {
+        legacyBootLogGen.incrementAndGet()
         legacyBootObservers.forEach { runCatching { it.stopWatching() } }
         legacyBootObservers = emptyList()
+    }
+
+    /**
+     * Added for AEmulator Plus (2026-11-17). m3 builds log the ACTION_BOOT_COMPLETED broadcast itself (ActivityManager:
+     * "Timeout of broadcast BroadcastRecord{... android.intent.action.BOOT_COMPLETED}"), while the file watches in
+     * [watchLegacyBoot] only fire when something opens /system/media or media.db (on m3 that was an export of the logs listing
+     * the tree, not the media scanner). The guest's main log is followed from its current end, so lines of an earlier run
+     * do not count; [onHit] runs once, on the first line that names the action. The earlier builds (20645, 29386) never log
+     * it, so for them the media scanner watches stay the only signal.
+     */
+    private fun pollBootCompletedInLog(gen: Int, onHit: () -> Unit) {
+        Thread {
+            val needle = "android.intent.action.BOOT_COMPLETED".toByteArray(Charsets.ISO_8859_1)
+            val f = File(paths.root, "dev/log/main")
+            var pos = if (f.isFile) f.length() else 0L
+            var carry = ByteArray(0)
+            while (legacyBootLogGen.get() == gen && !stopping && bootDoneAt == 0L) {
+                runCatching {
+                    val len = f.length()
+                    if (len < pos) { pos = 0L; carry = ByteArray(0) }   // the log was recreated
+                    if (len > pos) {
+                        java.io.RandomAccessFile(f, "r").use { r ->
+                            r.seek(pos)
+                            val n = minOf(len - pos, 262_144L).toInt()
+                            val b = ByteArray(n); r.readFully(b)
+                            pos += n
+                            val all = carry + b
+                            var hit = false
+                            var i = 0
+                            while (i <= all.size - needle.size && !hit) {
+                                var k = 0
+                                while (k < needle.size && all[i + k] == needle[k]) k++
+                                if (k == needle.size) hit = true else i++
+                            }
+                            // keep the tail, a line may be cut in the middle of the action name
+                            carry = all.copyOfRange(maxOf(0, all.size - (needle.size - 1)), all.size)
+                            if (hit && legacyBootLogGen.get() == gen) onHit()
+                        }
+                    }
+                }
+                try { Thread.sleep(1000) } catch (_: InterruptedException) { return@Thread }
+            }
+        }.apply { isDaemon = true; name = "boot-completed-log" }.start()
     }
 
     /**
@@ -2547,16 +2645,18 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
                 }
             }
         }.onFailure { log("pre-1.0 boot watch: cannot watch /sdcard/android: ${it.message}") }
-        if (observers.isEmpty()) { log("pre-1.0 boot watch: nothing to watch, no boot-completed signal to wait for"); return }
+        // 3. builds that log the broadcast: the first mention of android.intent.action.BOOT_COMPLETED in the guest's main log
+        pollBootCompletedInLog(legacyBootLogGen.get()) { fire("the guest logged android.intent.action.BOOT_COMPLETED") }
+        if (observers.isEmpty()) log("pre-1.0 boot watch: no file to watch, waiting for android.intent.action.BOOT_COMPLETED in the guest log only")
         observers.forEach { it.startWatching() }
         legacyBootObservers = observers
-        log("pre-1.0 boot watch: waiting for the guest to open /${LegacyFirmware.BOOT_SCAN_DIR} or /sdcard/android/media.db (media scanner, after BOOT_COMPLETED)")
+        log("pre-1.0 boot watch: waiting for android.intent.action.BOOT_COMPLETED in the guest log, or the guest to open /${LegacyFirmware.BOOT_SCAN_DIR} or /sdcard/android/media.db (media scanner, after BOOT_COMPLETED)")
     }
 
     @Volatile private var touchWizMediaStarted = false
 
     /**
-     * TouchWiz only: if /system/bin has samsungani (boot animation) and/or playsound (boot sound), run them during
+     * TouchWiz only: if /system/bin has samsungani (boot animation) and/or playsound / powersnd (boot sound; powersnd only when init declares it), run them during
      * boot. Missing binaries are skipped without an error, and nothing here can fail the boot.
      */
     private fun startTouchWizBootMedia() {
@@ -2566,13 +2666,46 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
             for (name in BootMediaServices.touchWizBootMedia(paths.root, img.skin)) {
                 // below 4.1 the animation never quits on its own (see onCtl), so don't force it there
                 if (name == "samsungani" && img.api < 16) { log("TouchWiz boot media: samsungani skipped on API ${img.api}"); continue }
-                val key = if (name == "playsound") name else "bootanim"
+                val key = if (name in BootMediaServices.SOUND_SERVICES) name else "bootanim"
                 if (synchronized(procs) { procs[key]?.isAlive == true }) continue
                 val def = BootMediaServices.resolve(paths.root, name) ?: continue
+                if (name in BootMediaServices.SOUND_SERVICES) {
+                    // started with surfaceflinger, the sound ran 4 s before mediaserver (AudioFlinger) existed and played nothing
+                    startBootSoundWhenAudioUp(def)
+                    log("TouchWiz boot media: $name queued until the audio server is up")
+                    continue
+                }
                 Thread { runCatching { startService(def) } }.start()
                 log("TouchWiz boot media: $name started")
             }
         }.onFailure { log("TouchWiz boot media: ${it.message}") }
+    }
+
+    private val bootSoundPending: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    /**
+     * Added for AEmulator Plus (2026-11-17). Samsung's boot sound (powersnd / playsound) is started by the boot animation, and on a real
+     * phone mediaserver (AudioFlinger, AudioPolicy) has long been up by then. Here the animation, and with it the sound, start with
+     * SurfaceFlinger, seconds before mediaserver: the sound program is alive, holds binder threads, sleeps in a retry loop and plays
+     * nothing (Galaxy S6 edge, no MediaPlayerService client from its pid). So the start waits for mediaserver / audioserver (at most 25 s)
+     * and a few seconds more for AudioFlinger and AudioPolicy to register, and is dropped when the boot has finished by then.
+     */
+    private fun startBootSoundWhenAudioUp(def: GuestService) {
+        if (!bootSoundPending.add(def.name)) return
+        Thread {
+            runCatching {
+                fun audioUp() = synchronized(procs) { listOf("audioserver", "mediaserver").any { procs[it]?.isAlive == true } }
+                val t0 = System.currentTimeMillis()
+                while (!stopping && bootSoundPending.contains(def.name) && !audioUp() && System.currentTimeMillis() - t0 < 25_000) Thread.sleep(200)
+                if (audioUp()) Thread.sleep(3_000)
+                val running = synchronized(procs) { procs[def.name]?.isAlive == true }
+                if (!stopping && bootSoundPending.remove(def.name) && bootDoneAt == 0L && !running) {
+                    log("boot sound: ${def.name} starts now (audio server up: ${audioUp()})")
+                    startService(def)
+                }
+            }.onFailure { log("boot sound: ${def.name}: ${it.message}") }
+            bootSoundPending.remove(def.name)
+        }.apply { isDaemon = true; start() }
     }
 
     /**
@@ -2677,8 +2810,12 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
             return
         }
         val def = plan.firstOrNull { it.name == svc } ?: InitPlan.optional(svc, img, paths.root)
-        if (svc == "playsound" && start && (bootDoneAt != 0L || synchronized(procs) { procs["playsound"]?.isAlive == true })) return
+        if (svc in BootMediaServices.SOUND_SERVICES && start && (bootDoneAt != 0L || synchronized(procs) { procs[svc]?.isAlive == true })) return
         if (def == null) { log("ctl.${if (start) "start" else "stop"} $svc: no such service"); return }
+        if (svc in BootMediaServices.SOUND_SERVICES) {
+            if (start) { startBootSoundWhenAudioUp(def); return }
+            bootSoundPending.remove(svc)
+        }
         synchronized(procs) { procs.remove(svc) }?.destroyForcibly()
         if (start) Thread { runCatching { startService(def) } }.start()
     }
@@ -3124,6 +3261,10 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
                                     if (guestLogHas("errorCode=-113")) " because its native libraries match none of the guest's ABIs (INSTALL_FAILED_NO_MATCHING_ABIS); see ro.product.cpu.abilist in the props lines of this log" else "; see the PackageManager lines of the guest log")
                             if (code == 137 && guestLogHas("Failure starting system services"))
                                 failure = Msg("system_server failed to start its services (zygote exited with 137 as a result); see the first BOOT FAILURE in the guest log", R.string.vmfail_system_server_services)
+                            // Added for AEmulator Plus (2026-11-17): Android 17 boards declare consumerir in the ODM; the board's IR HAL cannot
+                            // register here, ConsumerIrService throws and system_server ends (this is the more precise account of the line above)
+                            if (code == 137 && guestLogHas("FEATURE_CONSUMER_IR present, but no IR HAL loaded"))
+                                failure = Msg("system_server died in ConsumerIrService: the firmware declares android.hardware.consumerir but its IR HAL (android.hardware.ir-service) cannot register here, so zygote exited with 137; see the \"ir:\" lines of this log")
                             if (code == 137 && guestLogHas("IKeystoreService"))
                                 failure = Msg("system_server died because the keystore service does not exist (no keymaster HAL registered); see the \"keymaster:\" lines of this log")
                             if (code == 137 && guestLogHas("IBatteryPropertiesRegistrar.registerListener")) {
@@ -3712,7 +3853,13 @@ class GuestVm(val ctx: Context, val img: GuestImage, val lowPowerBoot: Boolean =
         if (engine == Engine.N64) return guestRunner.run(listOf("/system/bin/sh", "-c", shellPrefix + cmd), timeoutMs).second
         val r = guestRunner
         val path = GuestRunner.shellPath(r.env()["PATH"])
-        return r.run(listOf("/system/bin/sh", "-c", GuestRunner.scriptFns(paths.root) + cmd), timeoutMs, mapOf("PATH" to path)).second
+        // Modified for AEmulator Plus (2026-11-18): the 32-bit engines ran the firmware's tools through plain `sh <script>`
+        // only (scriptFns). Those tools (pm, am, settings...) finish their work but their VM never exits (main() has
+        // returned, "Shutting down VM" is logged, then DestroyJavaVM waits for the binder thread forever), so every
+        // call ran into its full timeout: "Activity launcher" sat on its spinner for two minutes and the app list never
+        // appeared. toolWrappers (app.aemu.stub.Run, which calls System.exit) comes after scriptFns, so where a tool has a
+        // wrapper it replaces the plain function of the same name.
+        return r.run(listOf("/system/bin/sh", "-c", GuestRunner.scriptFns(paths.root) + toolWrappers + cmd), timeoutMs, mapOf("PATH" to path)).second
     }
 
     fun rotateGuest(): Pair<Int, String> = guestRunner.run(listOf(appProcess,

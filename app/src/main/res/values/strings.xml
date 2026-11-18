@@ -176,6 +176,7 @@
     <string name="m_paste">Paste text from clipboard</string>
     <string name="m_sms">Fake SMS</string>
     <string name="m_battery">Battery</string>
+    <string name="m_battery_old_note">This Android version reads the battery only while it starts. The level and charging state you apply are saved and used the next time the VM starts.</string>
     <string name="m_screenshot">Screenshot</string>
     <string name="m_settings">Open Android settings</string>
     <string name="m_reboot">Reboot</string>
@@ -191,6 +192,7 @@
     <string name="m_sms_body">Message</string>
     <string name="m_send">Send</string>
     <string name="m_charging">Charging</string>
+    <string name="m_host_battery">Use host battery</string>
     <string name="m_apply">Apply</string>
     <string name="m_reset">Reset</string>
     <string name="m_call">Fake incoming call</string>
@@ -295,6 +297,7 @@
     <string name="catalog_retry">Retry</string>
     <string name="catalog_section_source">Open section source</string>
     <string name="catalog_download_rom">Download %1$s</string>
+    <string name="catalog_share_rom">Share download link for %1$s</string>
     <string name="catalog_back_sections">Back to sections</string>
     <plurals name="catalog_rom_count">
         <item quantity="one">%1$d ROM</item>
@@ -493,6 +496,8 @@
     <string name="as_led_sub">Show the guest phone’s LED above its screen</string>
     <string name="as_new_home">New home screen</string>
     <string name="as_new_home_sub">Grid library with a bottom bar (the 0.0.0.3 style). Turn off for the classic list. Takes effect after the app restarts.</string>
+    <string name="vs_no_dex2oat">Disable dex2oat (Android 5.0+)</string>
+    <string name="vs_no_dex2oat_sub">Apps and system code are never compiled in the guest: every dex2oat run fails at once. Warning: this might cause crashes, glitches and other unintended behavior (apps run slower, some firmware cannot boot without compiling). Off by default. Applies at the next full start.</string>
     <string name="vs_art_boot_image">Use ART boot image (Android 14+)</string>
     <string name="vs_art_boot_image_sub">Off: the guest runs without a boot image. Start-up is slower, but nothing of the image can fail. On: the emulator prepares a boot image for this runtime (built once at the next start, which takes a while).</string>
     <string name="vs_no_watchdog">Disable system watchdog (Android 14+)</string>
@@ -539,4 +544,12 @@
     <string name="catalog_download_checking">Checking link…</string>
     <string name="catalog_download_title">Downloading ROM</string>
     <string name="catalog_download_failed">Download failed: %1$s</string>
+    <string name="m_activities">Activity launcher</string>
+    <string name="al_title">Activity launcher</string>
+    <string name="al_search_packages">Search packages</string>
+    <string name="al_search_activities">Search activities</string>
+    <string name="al_no_packages">No packages found</string>
+    <string name="al_no_activities">No activities found</string>
+    <string name="al_not_exported">not exported</string>
+    <string name="al_starting">Starting %1$s…</string>
 </resources>

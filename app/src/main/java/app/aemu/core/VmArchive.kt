@@ -2,12 +2,12 @@
 package app.aemu.core
 
 import app.aemu.R
+import app.aemu.archive.ArcStreams
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
 import java.nio.file.Files
 import java.nio.file.LinkOption.NOFOLLOW_LINKS
-import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
@@ -100,7 +100,7 @@ internal object VmArchive {
         val links = ArrayList<Triple<File, String, Metadata>>()
         var image: String? = null
         var selection: Selection? = null
-        TarArchiveInputStream(GZIPInputStream(input.buffered(65536))).use { tar ->
+        TarArchiveInputStream(ArcStreams.gzip(input.buffered(65536))).use { tar ->
             val first = tar.nextTarEntry ?: localizedError("Empty VM archive", R.string.err_empty_vm_archive)
             val version = readVersion(first, tar)
             while (true) {
@@ -166,7 +166,7 @@ internal object VmArchive {
     }
 
     /** Read bounded leading metadata only; importing settings never extracts partitions. */
-    fun profile(input: InputStream): Profile = TarArchiveInputStream(GZIPInputStream(input.buffered(65536))).use { tar ->
+    fun profile(input: InputStream): Profile = TarArchiveInputStream(ArcStreams.gzip(input.buffered(65536))).use { tar ->
         val version = readVersion(tar.nextTarEntry ?: localizedError("Empty archive", R.string.err_empty_archive), tar)
         val entry = tar.nextTarEntry ?: localizedError("Missing VM profile", R.string.err_missing_vm_profile)
         require(entry.name == "image.json" && entry.isFile && entry.size in 1..1_048_576)

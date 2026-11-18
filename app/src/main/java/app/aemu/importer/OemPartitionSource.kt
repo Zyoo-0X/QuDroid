@@ -1,6 +1,7 @@
 package app.aemu.importer
 
 import java.io.File
+import app.aemu.archive.ArcStreams
 import java.io.InputStream
 import java.nio.file.Files
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
@@ -40,7 +41,7 @@ internal object OemPartitionSource {
         }
         val compressed = runCatching { CompressorStreamFactory.detect(src) }.getOrNull()
         if (compressed != null) {
-            CompressorStreamFactory(true, 65536).createCompressorInputStream(compressed, src).use {
+            ArcStreams.byName(compressed, src).use {
                 return read(it, lower.substringBeforeLast('.', lower), scratch, depth + 1, accept, what)
             }
         }

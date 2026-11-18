@@ -80,4 +80,26 @@ binderd:   ★ неисправности с начала работы: рабо
             GuestPreload.value(false, guard = true))
         assertEquals("glibc firmware never gets it", GuestPreload.value(true), GuestPreload.value(true, guard = true))
     }
+
+    private val mcdFp = "sprd/sprdroid_base/hsdroid:4.0.3/MocorDroid2.3.5/6820_2.3.5_C909_hteng_s2_RU_dt6206_V01:user/test-keys"
+
+    @Test fun onlyTheMocorDroid235FingerprintMatches() {
+        assertTrue(BinderGuard.isMocorDroid235(mcdFp))
+        assertFalse(BinderGuard.isMocorDroid235("sprd/sprdroid_base/hsdroid:4.0.3/MocorDroid2.3.6/6820_2.3.5:user/test-keys"))
+        assertFalse(BinderGuard.isMocorDroid235("samsung/m0xx/m0:4.0.4/IMM76D/I9300XXALF2:user/release-keys"))
+        // the build id has to be the id field, not a word elsewhere in the fingerprint
+        assertFalse(BinderGuard.isMocorDroid235("MocorDroid2.3.5/x/y:4.0.3/GRK39F/1:user/release-keys"))
+        assertFalse(BinderGuard.isMocorDroid235(""))
+        assertFalse(BinderGuard.isMocorDroid235(null))
+    }
+
+    @Test fun readsOnlyRoBuildFingerprintOfSystemBuildProp() {
+        val root = tmp.newFolder("tree")
+        assertFalse(BinderGuard.firmwareMatches(root))
+        File(root, "system").mkdirs()
+        File(root, "system/build.prop").writeText("ro.build.id=MocorDroid2.3.5\nro.build.display.id=MocorDroid2.3.5\nro.build.fingerprint=samsung/m0xx/m0:4.0.4/IMM76D/1:user/release-keys\n")
+        assertFalse("other build properties do not count", BinderGuard.firmwareMatches(root))
+        File(root, "system/build.prop").writeText("ro.build.id=IMM76D\nro.build.fingerprint=$mcdFp\n")
+        assertTrue(BinderGuard.firmwareMatches(root))
+    }
 }

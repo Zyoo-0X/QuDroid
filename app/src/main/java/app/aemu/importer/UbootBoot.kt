@@ -1,11 +1,11 @@
 package app.aemu.importer
 
 import java.io.ByteArrayInputStream
+import app.aemu.archive.ArcStreams
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
 
 /**
  * The boot partition of a development board card (PandaBoard, BeagleBone, ODROID, Allwinner ...): a small FAT volume, not
@@ -59,7 +59,7 @@ internal object UbootBoot {
         // U-Boot's "bzip2" compression type: the boot image format has no place for it, so it is stored unpacked
         if (p.comp == 2 || (d[0] == 'B'.code.toByte() && d[1] == 'Z'.code.toByte() && d[2] == 'h'.code.toByte())) {
             val raw = runCatching {
-                BZip2CompressorInputStream(ByteArrayInputStream(d)).use { z ->
+                ArcStreams.bzip2(ByteArrayInputStream(d)).use { z ->
                     val out = ByteArrayOutputStream()
                     val buf = ByteArray(1 shl 16)
                     while (true) {

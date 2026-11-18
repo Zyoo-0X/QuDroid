@@ -7,6 +7,7 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
@@ -173,6 +174,12 @@
             android:theme="@style/Theme.AEmulator.TabDialog" />
 
         <activity android:name=".ui.VmRestartActivity" android:exported="false" />
+
+        <!-- catalog ROM downloads: keeps a download going with the screen off or the app minimised -->
+        <service
+            android:name=".catalog.RomDownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <service
             android:name=".core.Keeper"

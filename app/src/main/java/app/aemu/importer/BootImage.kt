@@ -2,15 +2,13 @@
 package app.aemu.importer
 
 import app.aemu.core.LegacyFirmware
+import app.aemu.archive.ArcStreams
 import app.aemu.core.VmSettings
-import org.tukaani.xz.LZMAInputStream
-import org.tukaani.xz.XZInputStream
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.util.zip.GZIPInputStream
 import java.util.zip.Inflater
 
 /**
@@ -29,8 +27,8 @@ object BootImage {
      * image looked like it had no ramdisk. 160 MiB admits those and still refuses a hostile header asking for gigabytes.
      */
     private const val CODEC_LIMIT_KIB = 160 * 1024
-    private fun lzmaStream(d: ByteArray): InputStream = LZMAInputStream(ByteArrayInputStream(d), CODEC_LIMIT_KIB)
-    private fun xzStream(d: ByteArray): InputStream = XZInputStream(ByteArrayInputStream(d), CODEC_LIMIT_KIB)
+    private fun lzmaStream(d: ByteArray): InputStream = ArcStreams.lzma(ByteArrayInputStream(d))
+    private fun xzStream(d: ByteArray): InputStream = ArcStreams.xz(ByteArrayInputStream(d))
     private fun InputStream.bounded(): ByteArray {
         val out = ByteArrayOutputStream()
         val buf = ByteArray(65536)
@@ -295,7 +293,7 @@ object BootImage {
     fun gunzipLenient(d: ByteArray): ByteArray {
         val out = ByteArrayOutputStream()
         try {
-            GZIPInputStream(ByteArrayInputStream(d), 65536).use { g ->
+            ArcStreams.gzip(ByteArrayInputStream(d)).use { g ->
                 val b = ByteArray(65536)
                 while (true) { val n = g.read(b); if (n < 0) break; require(out.size().toLong() + n <= MAX_DECODED); out.write(b, 0, n) }
             }

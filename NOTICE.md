@@ -146,3 +146,10 @@ publishing notices or hashes does not remedy missing required source.
 Added the HTTP debugger (`app/src/main/java/app/aemu/netdebug/`, `native/common/aemu_nethook.h`, `docs/http-debugger.md`) and
 its hooks in `GuestVm`, `GuestRunner`, `DnsProxy`, `GuestImage`, the VM menu and settings, and the native engine's
 runner (`native/guest64/*/run64.c`).
+
+
+## Native archive library (native/archive), 2026-11-18
+
+`libaemuarc.so` vendors unmodified decoder sources: zlib 1.3.1 (zlib license), bzip2 1.0.8 (bzip2 license), LZ4 1.10.0 library (BSD-2-Clause),
+Zstandard 1.5.7 (BSD-3-Clause, chosen from BSD/GPLv2), Brotli 1.1.0 (MIT), and the 7-Zip 25.01 LZMA SDK `C/` directory (public domain, Igor Pavlov).
+`native/archive/jni/jni.h` and `jni_md.h` are from OpenJDK (GPLv2 with Classpath Exception). The licenses are kept in `native/archive/third_party/*/`.

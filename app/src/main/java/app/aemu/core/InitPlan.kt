@@ -316,17 +316,23 @@ object InitPlan {
         // which starves system_server, the window manager's input dispatch stays off ("Dropped event because input dispatch is
         // disabled") and touch never reaches the UI (Android 4.2 MT65xx image, 2026-11-06). Nothing depends on it.
         "aal",
+        // mdpd: MediaTek's display-processor (MDP bitblt) daemon. There is no MDP kernel driver here, so its wait loop
+        // ("MDP device driver is not opened!" / "MDPK_BITBLT_G_WAIT_REQUEST failed") retries with no pause: it was the only
+        // running thread of the whole guest (~60% of a core) and wrote ~1.8 million log lines in two minutes (a 1.3 GB
+        // dev/log/main), so system_server never got to finish SurfaceFlinger's start (Android 2.3 MT6575, 2026-11-18).
+        // Nothing waits for it: the callers (mediaserver, camera HAL) fall back when the driver is missing.
+        "mdpd",
         // mountd (1.0-1.5): cannot mount a block device here; the host answers on its socket instead (VoldStub)
         "mountd",
         "ueventd", "vold", "rild", "ril-daemon", "adbd", "debuggerd", "debuggerd64", "console", "dbus", "bluetoothd",
         "btld", "wpa_supplicant", "p2p_supplicant", "dhcpcd", "racoon", "mtpd", "qemud", "goldfish-setup", "goldfish-logcat",
         "dumpstate", "flash_recovery", "recovery", "redbend_ua", "sreadaheadd", "lpm", "lpmkey", "playlpm", "charger", "macloader",
-        "mfgloader", "wlandutservice", "bt_dut_cmd", "bootanim", "samsungani", "playsound", BootMediaServices.LEGACY_LOGO, "sdcard", "fuse_sdcard0",
+        "mfgloader", "wlandutservice", "bt_dut_cmd", "bootanim", "samsungani", "playsound", "powersnd", BootMediaServices.LEGACY_LOGO, "sdcard", "fuse_sdcard0",
         "healthd", "logd", "lmkd", "watchdogd", "ril-daemon1", "ril-daemon2", "fota", "gpsd", "sensors", "akmd",
         "rmt_storage", "qmuxd", "netmgrd", "thermald", "mpdecision", "thermal-engine", "time_daemon", "diag", "common_time", "tf_daemon",
     )
     private val SKIP_BIN = setOf(
-        "logwrapper", "aal", "sh", "rild", "vold", "wpa_supplicant", "dhcpcd", "bluetoothd", "hciattach", "btld", "adbd",
+        "logwrapper", "aal", "mdpd", "sh", "rild", "vold", "wpa_supplicant", "dhcpcd", "bluetoothd", "hciattach", "btld", "adbd",
         "sdcard", "gpsd", "gps", "akmd", "orientationd", "geomagneticd", "sensor", "charging", "playlpm", "lpm", "lpmkey", "bootanimation",
         "rmt_storage", "qmuxd", "netmgrd", "thermald", "mpdecision", "thermal-engine", "fm_", "wifi", "wifi_", "gps_", "hostapd", "mediaserver",
         "common_time", "tf_daemon", "drexe", "npsmobex", "immvibed", "cbd", "smdexe", "ddexe", "mdm_helper", "rilproxy",
@@ -389,7 +395,7 @@ object InitPlan {
 
     /** Служба, которую гость может попросить через ctl.start (например bootanim). */
     fun optional(name: String, img: GuestImage, root: File): GuestService? = when (name) {
-        "bootanim", "bootanimation", "samsungani", "playsound", BootMediaServices.LEGACY_LOGO -> BootMediaServices.resolve(root, name)
+        "bootanim", "bootanimation", "samsungani", "playsound", "powersnd", BootMediaServices.LEGACY_LOGO -> BootMediaServices.resolve(root, name)
         else -> null
     }
 

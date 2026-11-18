@@ -92,6 +92,7 @@ extern int *__errno(void);
 
 static int fail(long r) { *__errno() = (int)-r; return -1; }
 
+#include "uevent.h"
 #include "netmgr.h"
 
 static long raw_execve(const char *path, char *const argv[], char *const envp[]) {

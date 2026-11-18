@@ -61,4 +61,19 @@ class RomCatalogTest {
     @Test(expected = IllegalArgumentException::class) fun boundsLineCount() {
         RomCatalogParser.parse("\n".repeat(10_001))
     }
+    @Test fun versionCategoriesBecomeSubsectionsOfTheirVariant() {
+        val catalog = RomJsonParser.parse("""{"roms":[
+            {"variant":"Android","version_category":"4.4","name":"A","device":"d","download_url":"https://example.org/a"},
+            {"variant":"Android","version_category":"5.0","name":"B","device":"d","download_url":"https://example.org/b"},
+            {"variant":"Android","version_category":"4.4","name":"C","device":"d","download_url":"https://example.org/c"},
+            {"variant":"Android","version_category":"","name":"D","device":"d","download_url":"https://example.org/d"},
+            {"variant":"Other","version_category":"1","name":"E","device":"d","download_url":"https://example.org/e"}]}""")
+        val android = catalog.sections.first()
+        assertEquals(listOf("Android", "Other"), catalog.sections.map { it.name })
+        assertEquals(listOf("4.4", "5.0"), android.subsections.map { it.name })
+        assertEquals(listOf("A", "C"), android.subsections.first().roms.map { it.details!!.name })
+        assertEquals(listOf("D"), android.roms.map { it.details!!.name })
+        assertEquals(4, android.romCount)
+        assertEquals(1, catalog.sections.last().romCount)
+    }
 }

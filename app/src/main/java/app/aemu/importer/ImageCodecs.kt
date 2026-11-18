@@ -1,16 +1,9 @@
 package app.aemu.importer
 
-import com.github.luben.zstd.ZstdInputStream
-import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
-import org.apache.commons.compress.compressors.lz4.FramedLZ4CompressorInputStream
-import org.brotli.dec.BrotliInputStream
-import org.tukaani.xz.LZMAInputStream
-import org.tukaani.xz.XZInputStream
-import java.io.BufferedInputStream
 import java.io.ByteArrayInputStream
+import app.aemu.archive.ArcStreams
 import java.io.IOException
 import java.io.InputStream
-import java.util.zip.GZIPInputStream
 
 /**
  * Whole-file compression of partition images: system.img.xz / .lzma / .lz4 / .zst / .br / .bz2 / .gz, and the same
@@ -40,15 +33,15 @@ internal object ImageCodecs {
     }
 
     fun open(codec: Codec, raw: InputStream): InputStream {
-        val i = BufferedInputStream(raw, 1 shl 16)
+        // libaemuarc (native) when loaded, the Java libraries otherwise; the native decoder reads the source in big blocks itself
         return when (codec) {
-            Codec.GZIP -> GZIPInputStream(i, 1 shl 16)
-            Codec.XZ -> XZInputStream(i)
-            Codec.LZMA -> LZMAInputStream(i, -1) // -1: no memory limit (system images are packed with big dictionaries)
-            Codec.BZIP2 -> BZip2CompressorInputStream(i, true)
-            Codec.LZ4 -> FramedLZ4CompressorInputStream(i, true)
-            Codec.ZSTD -> ZstdInputStream(i)
-            Codec.BROTLI -> BrotliInputStream(i)
+            Codec.GZIP -> ArcStreams.gzip(raw)
+            Codec.XZ -> ArcStreams.xz(raw)
+            Codec.LZMA -> ArcStreams.lzma(raw) // no memory limit (system images are packed with big dictionaries)
+            Codec.BZIP2 -> ArcStreams.bzip2(raw)
+            Codec.LZ4 -> ArcStreams.lz4(raw)
+            Codec.ZSTD -> ArcStreams.zstd(raw)
+            Codec.BROTLI -> ArcStreams.brotli(raw)
         }
     }
 
@@ -75,7 +68,7 @@ internal object ImageCodecs {
         if (name != null && name.endsWith(".br", true) && !name.endsWith(".new.dat.br", true)) return true
         if (h.size < 256 || fsMagic(h, h.size)) return false
         return try {
-            val s = BrotliInputStream(ByteArrayInputStream(h))
+            val s = ArcStreams.brotli(ByteArrayInputStream(h))
             val out = ByteArray(8192)
             var got = 0
             try {

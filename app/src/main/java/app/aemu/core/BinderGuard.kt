@@ -18,6 +18,10 @@ import java.security.MessageDigest
  * daemon is a different log format and a different set of faults, so it starts over from "not armed".
  * A guard that was armed and never fired while the hang came back is marked ineffective and is not armed again for that
  * daemon build: the cause is then somewhere else and the guard only adds risk.
+ *
+ * The whole mechanism (the log check, arming, the restart that follows and the preload) is only for the firmware it was
+ * made for: the build id of the system's ro.build.fingerprint is MocorDroid2.3.5 ([isMocorDroid235]). Any other firmware
+ * is never restarted by it and never gets the library, whatever its binderd.log says.
  */
 object BinderGuard {
     const val ENV = "AEMU_GUARD"
@@ -31,6 +35,31 @@ object BinderGuard {
     private val HUNG = "ЗАВИСШАЯ ТРАНЗАКЦИЯ"
     /** the counter line of the pool report: "ответов голым объектом 19" */
     private val BARE_COUNT = Regex("""ответов голым объектом\s+(\d+)""")
+
+    /** the build id the guard is restricted to: the second field after the first colon of ro.build.fingerprint */
+    private const val FIRMWARE_BUILD_ID = "MocorDroid2.3.5"
+
+    /**
+     * true when [fingerprint] ("brand/product/device:release/id/incremental:type/tags") names the Sprd MocorDroid 2.3.5 build, e.g.
+     * sprd/sprdroid_base/hsdroid:4.0.3/MocorDroid2.3.5/6820_2.3.5_C909_hteng_s2_RU_dt6206_V01:user/test-keys. Only the build id
+     * (the "id" field) of the fingerprint is compared; ro.build.display.id and the other build properties are not looked at.
+     */
+    fun isMocorDroid235(fingerprint: String?): Boolean {
+        val fields = fingerprint?.trim()?.split(':') ?: return false
+        if (fields.size < 2) return false
+        val release = fields[1].split('/')
+        return release.size >= 2 && release[1].equals(FIRMWARE_BUILD_ID, ignoreCase = true)
+    }
+
+    /** ro.build.fingerprint of the tree's /system/build.prop; null when there is no such file or line */
+    fun fingerprint(root: File): String? = runCatching {
+        File(root, "system/build.prop").useLines { ls ->
+            ls.map { it.trim() }.firstOrNull { it.startsWith("ro.build.fingerprint=") }?.substringAfter('=')?.trim()
+        }
+    }.getOrNull()
+
+    /** true when the tree under [root] is the firmware the guard is for */
+    fun firmwareMatches(root: File): Boolean = isMocorDroid235(fingerprint(root))
 
     data class State(val armed: Boolean, val ineffective: Boolean, val binderd: String, val since: String, val bare: Int)
 

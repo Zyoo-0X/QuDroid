@@ -42,6 +42,16 @@ they are built from `native/audiohal/audio_hal.c` by `native/audiohal/build.sh`
 microphone change. Their individual origins and licenses still need
 verification. Source-present is not proof of a binary/source match.
 
+`app/src/main/assets/engines/kk-x86/gralloc.default.so` (added 2026-11-17, replaced the same day by the build with the single-page
+fb0 fix; i386 AOSP gralloc for x86 Eclair, bionic, SHA-256 `a3566b25e83a731ab26b1d79db390e7ea2da753bc4e5f40daf4d14dcaf59a4d7`) was built outside this checkout: the change to the
+AOSP source is `native/gralloc-eclair/gralloc-single-page-ashmem.patch`; the rest of the source tree, the toolchain and the build
+script still have to be added.
+
+`app/src/main/assets/engines/glibc-x86/gralloc.default.so` (SHA-256 `95b28fbf8c8b54ff3778ba6489fac77beac968d43c9be0cc032efadb3235fbcb`) is the file above with 97 bytes of its
+dynamic string table rewritten by `tools/patch_gralloc_glibc.py` (same source, same open questions). `.../glibc-x86/aegr.so`
+(SHA-256 `b1c2580ddd52753b42fd253868bd097c7620333b9cc76864fd3095d99e6de521`) is built from `native/revue-shims/aegr_shim.c` by `native/revue-shims/build-aegr.sh` (zig cc, freestanding i386) and
+has no third-party code.
+
 Inspection of the checkout and upstream README did not establish a pinned
 repository/version/patch set for those binaries. A generic QEMU download,
 upstream credits, a hash list or a tag containing only binaries is not a

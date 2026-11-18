@@ -27,6 +27,9 @@ class Analyzer(private val ctx: Context, private val paths: VmPaths, private val
 
     fun analyze(id: String, sourceName: String, persistBuildProp: Boolean = true): GuestImage {
         val buildFile = File(root, "system/build.prop")
+        // a build.prop that is a symlink into a partition the package did not carry (Alcatel: -> /custpack/build.prop) dangles:
+        // isFile is false, and writing the synthesized text through it fails with ENOENT. Drop the link, the text goes in its place.
+        if (!buildFile.exists() && java.nio.file.Files.isSymbolicLink(buildFile.toPath())) runCatching { buildFile.delete() }
         val noBuildProp = !buildFile.isFile
         val buildText = if (noBuildProp) synthBuildProp().also { if (persistBuildProp) buildFile.writeText(it) }
             else buildFile.readText(Charsets.UTF_8)
@@ -46,7 +49,7 @@ class Analyzer(private val ctx: Context, private val paths: VmPaths, private val
         val skinParts = root.listFiles()?.filter { it.isDirectory && it.name.matches(Regex("mi_ext|my_[a-z]+|vgc|prism|optics")) }
             ?.flatMap { listOf("${it.name}/etc/build.prop", "${it.name}/build.prop") } ?: emptyList()
         for (n in skinParts + listOf("product/etc/build.prop", "product/build.prop", "system/product/etc/build.prop", "system/product/build.prop",
-            "odm/etc/build.prop", "odm/build.prop", "vendor/build.prop",
+            "odm/etc/build.prop", "odm/build.prop", "vendor/build.prop", "custpack/build.prop",
             "system_ext/etc/build.prop", "system_ext/build.prop", "system/system_ext/etc/build.prop", "system/system_ext/build.prop")) runCatching {
             File(root, n).takeIf { it.isFile }?.let { f -> PropArea.parseProps(f.readText()).forEach { (k, v) -> ident.putIfAbsent(k, v) } }
         }

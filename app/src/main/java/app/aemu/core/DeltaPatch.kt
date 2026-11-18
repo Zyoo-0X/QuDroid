@@ -1,7 +1,7 @@
 /* AEmulator Sunset addition: delta OTA support. GPL-3.0; see LICENSE. */
 package app.aemu.core
 
-import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
+import app.aemu.archive.ArcStreams
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
@@ -38,10 +38,10 @@ internal object BsPatch {
         val ctrlAt = patchAt + 32
         val diffAt = ctrlAt + ctrlLen.toInt()
         val extraAt = diffAt + diffLen.toInt()
-        val ctrlS = DataInputStream(BZip2CompressorInputStream(ByteArrayInputStream(patch, ctrlAt, ctrlLen.toInt())))
-        val diffS = DataInputStream(BZip2CompressorInputStream(ByteArrayInputStream(patch, diffAt, diffLen.toInt())))
+        val ctrlS = DataInputStream(ArcStreams.bzip2(ByteArrayInputStream(patch, ctrlAt, ctrlLen.toInt())))
+        val diffS = DataInputStream(ArcStreams.bzip2(ByteArrayInputStream(patch, diffAt, diffLen.toInt())))
         // the extra block runs to the end of the buffer; the bzip2 stream stops by itself at its end marker
-        val extraS = DataInputStream(BZip2CompressorInputStream(ByteArrayInputStream(patch, extraAt, patch.size - extraAt)))
+        val extraS = DataInputStream(ArcStreams.bzip2(ByteArrayInputStream(patch, extraAt, patch.size - extraAt)))
         val out = ByteArray(newSize.toInt())
         val ctrl = ByteArray(24)
         var oldPos = 0L

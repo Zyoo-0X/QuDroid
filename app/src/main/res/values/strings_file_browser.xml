@@ -4,6 +4,9 @@
     <string name="fb_title_multi">Choose files</string>
     <string name="fb_title_single">Choose a file</string>
     <string name="fb_up">Up</string>
+    <string name="fb_search">Search</string>
+    <string name="fb_search_hint">Search in this folder</string>
+    <string name="fb_no_matches">No files or folders match</string>
     <string name="fb_system_picker">System picker</string>
     <string name="fb_use_system_picker">Use the system picker instead</string>
 

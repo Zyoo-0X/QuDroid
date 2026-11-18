@@ -31,4 +31,6 @@
     <string name="catalog_err_too_many_roms">В каталоге больше 10000 ROM.</string>
     <string name="catalog_tested_on">Эмулятор %1$s</string>
     <string name="catalog_submitted_by">Отправил(а): %1$s</string>
+    <string name="submit_not_direct_title">Нужна прямая ссылка</string>
+    <string name="submit_not_direct_text">Ссылка должна быть прямой ссылкой на файл прошивки. Ссылки на веб-страницы и на файлообменники, которые сначала открывают страницу, не принимаются.\n\nРекомендуемый сайт для загрузки — archive.org.</string>
 </resources>

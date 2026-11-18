@@ -3,7 +3,9 @@ package app.aemu.core
 import java.io.File
 
 /**
- * Added for AEmulator Plus, 2026-11-12. The stand-in composer (native/hwc1fb, see TreeFixer.framebufferComposer) goes into every
+ * Added for AEmulator Plus, 2026-11-12. Since 2026-11-17 this is only the LAST RESORT: [HwcAbi] reads the firmware's own
+ * libsurfaceflinger.so before the stand-in goes in and keeps it out of a vendor-extended SurfaceFlinger (which does not crash
+ * with it but draws garbage); the crash fallback below catches what that scan could not see. The stand-in composer (native/hwc1fb, see TreeFixer.framebufferComposer) goes into every
  * 4.2 - 4.4 image first. A vendor-modified SurfaceFlinger (MediaTek's, for one) can call composer entry points the stand-in does
  * not have and dies with SIGSEGV right after it starts. When that happens before the system has booted, the stand-in is taken out
  * again and the system is restarted without it; a marker file in the image directory remembers the verdict, so the image keeps

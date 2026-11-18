@@ -22,17 +22,21 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.CreateNewFolder
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.DriveFileRenameOutline
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -60,12 +64,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -149,6 +157,9 @@ private fun VmFileBrowserDialog(img: GuestImage, onDismiss: () -> Unit) {
     var asc by remember { mutableStateOf(true) }
     var hidden by remember { mutableStateOf(true) }
     val selected = remember { mutableStateListOf<VmNode>() }
+    // search: filters the names in the open folder (as in the import browser); it is cleared when another folder is opened
+    var searching by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
 
     var preview by remember { mutableStateOf<VmNode?>(null) }
     var renaming by remember { mutableStateOf<VmNode?>(null) }
@@ -159,7 +170,7 @@ private fun VmFileBrowserDialog(img: GuestImage, onDismiss: () -> Unit) {
     var progress by remember { mutableStateOf("") }
     var result by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(current) { selected.clear() }
+    LaunchedEffect(current) { selected.clear(); searching = false; query = "" }
 
     /** Runs [block] off the main thread behind a progress dialog; its text (if any) is shown afterwards. */
     fun runOp(label: String, block: () -> String?) {
@@ -203,7 +214,9 @@ private fun VmFileBrowserDialog(img: GuestImage, onDismiss: () -> Unit) {
 
     // Back: first ends a selection, then one folder up, then out
     Dialog(onDismissRequest = {
-        if (selected.isNotEmpty()) selected.clear() else up(current)?.let { current = it } ?: onDismiss()
+        if (selected.isNotEmpty()) selected.clear()
+        else if (searching) { searching = false; query = "" }
+        else up(current)?.let { current = it } ?: onDismiss()
     }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
             Column(Modifier.fillMaxSize().safeDrawingPadding()) {
@@ -218,6 +231,27 @@ private fun VmFileBrowserDialog(img: GuestImage, onDismiss: () -> Unit) {
                         Text(current.path.removePrefix(vm.path).ifEmpty { "/" }, style = MaterialTheme.typography.bodySmall, maxLines = 1,
                             overflow = TextOverflow.StartEllipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                    IconButton(onClick = {
+                        if (searching) query = "" // a tap on the icon while searching closes the field
+                        searching = !searching
+                    }) { Icon(Icons.Rounded.Search, stringResource(R.string.fb_search)) }
+                }
+                if (searching) {
+                    val focus = remember { FocusRequester() }
+                    val focusManager = LocalFocusManager.current
+                    LaunchedEffect(Unit) { focus.requestFocus() }
+                    OutlinedTextField(
+                        value = query, onValueChange = { query = it },
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).focusRequester(focus),
+                        singleLine = true,
+                        placeholder = { Text(stringResource(R.string.fb_search_hint)) },
+                        leadingIcon = { Icon(Icons.Rounded.Search, null) },
+                        trailingIcon = if (query.isNotEmpty()) ({
+                            IconButton(onClick = { query = "" }) { Icon(Icons.Rounded.Close, stringResource(R.string.fb_clear)) }
+                        }) else null,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+                    )
                 }
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -250,8 +284,11 @@ private fun VmFileBrowserDialog(img: GuestImage, onDismiss: () -> Unit) {
                         VmListing.Loading -> Centered { CircularProgressIndicator() }
                         VmListing.Unreadable -> Centered { Message(stringResource(R.string.vmf_unreadable)) }
                         is VmListing.Ok -> {
-                            val shown = remember(l, sortKey, asc, hidden) {
-                                l.nodes.filter { hidden || !it.name.startsWith(".") }.sortedWith(nodeComparator(sortKey, asc))
+                            val shown = remember(l, sortKey, asc, hidden, query) {
+                                val needle = query.trim()
+                                l.nodes.filter { hidden || !it.name.startsWith(".") }
+                                    .filter { needle.isEmpty() || it.name.contains(needle, ignoreCase = true) }
+                                    .sortedWith(nodeComparator(sortKey, asc))
                             }
                             if (shown.isEmpty()) Centered { Message(stringResource(R.string.fb_empty)) }
                             else LazyColumn(Modifier.fillMaxSize(), state = state) {

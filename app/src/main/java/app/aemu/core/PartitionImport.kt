@@ -33,7 +33,7 @@ internal object PartitionImport {
     private const val RECOVERY_LIMIT = 64_000_000
 
     /** What the screen offers when the name does not say. */
-    val CHOICES = listOf(BOOT, RECOVERY, "oem", "vendor", "odm", "system/product", "system/system_ext")
+    val CHOICES = listOf(BOOT, RECOVERY, "oem", "vendor", "odm", "system/product", "system/system_ext", "cust")
 
     /** Recognised, but not importable here. */
     val UNSUPPORTED = setOf("system")

@@ -122,6 +122,16 @@ fun SettingsSheet(img: GuestImage, onDismiss: () -> Unit, onSave: (VmSettings, S
                 Text(stringResource(R.string.vs_fixed_2x), style = MaterialTheme.typography.bodyMedium)
             } else {
                 val firmwareDensity = remember(img.id) { ResolutionPreset.buildPropDensity(app.aemu.core.VmPaths(ctx, img.id).root) }
+                val hostScreen = remember(ctx) {
+                    val point = android.graphics.Point()
+                    val wm = ctx.getSystemService(android.content.Context.WINDOW_SERVICE) as android.view.WindowManager
+                    wm.defaultDisplay.getRealSize(point)
+                    val (hostWidth, hostHeight) = app.aemu.core.DisplayGeometry.natural(point.x, point.y, wm.defaultDisplay.rotation)
+                    Triple(hostWidth, hostHeight, ctx.resources.displayMetrics.densityDpi)
+                }
+                fun followingHost(value: VmSettings) = value.copy(width = hostScreen.first and -2,
+                    height = hostScreen.second and -2, density = hostScreen.third)
+                LaunchedEffect(img.id, s.hostResolution) { if (s.hostResolution) s = followingHost(s) }
                 var presetMenu by remember { mutableStateOf(false) }
                 val current = RESOLUTIONS.firstOrNull { it.selected(s) }
                 val hostLabel = stringResource(R.string.vs_resolution_host)
@@ -136,7 +146,10 @@ fun SettingsSheet(img: GuestImage, onDismiss: () -> Unit, onSave: (VmSettings, S
                         RESOLUTIONS.forEach { r ->
                             DropdownMenuItem(
                                 text = { Text(name(r), fontWeight = if (r == current) FontWeight.Bold else null) },
-                                onClick = { s = r.apply(s, firmwareDensity); presetMenu = false },
+                                onClick = {
+                                    s = if (r.isHost) followingHost(s.copy(hostResolution = true)) else r.apply(s, firmwareDensity)
+                                    presetMenu = false
+                                },
                             )
                         }
                     }
@@ -160,6 +173,7 @@ fun SettingsSheet(img: GuestImage, onDismiss: () -> Unit, onSave: (VmSettings, S
             if (img.api >= 14) Toggle(stringResource(R.string.vs_hwui), stringResource(R.string.vs_hwui_sub), s.hwui) { s = s.copy(hwui = it) }
             Toggle(stringResource(R.string.vs_jit), stringResource(R.string.vs_jit_sub), s.jit) { s = s.copy(jit = it) }
             if (img.api >= 21) Toggle(stringResource(R.string.vs_fulldex), stringResource(R.string.vs_fulldex_sub), s.fullDexopt) { s = s.copy(fullDexopt = it) }
+            if (img.api >= 21) Toggle(stringResource(R.string.vs_no_dex2oat), stringResource(R.string.vs_no_dex2oat_sub), s.disableDex2oat) { s = s.copy(disableDex2oat = it) }
             if (img.api < 14) Toggle(stringResource(R.string.vs_legacy), stringResource(R.string.vs_legacy_sub), s.legacyEngine) { s = s.copy(legacyEngine = it) }
             if (img.api >= 26 && img.abi.startsWith("armeabi")) Toggle(
                 "Translate on the native engine",

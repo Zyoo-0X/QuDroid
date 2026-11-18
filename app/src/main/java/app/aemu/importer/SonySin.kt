@@ -3,7 +3,7 @@
 package app.aemu.importer
 
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
-import org.apache.commons.compress.compressors.lz4.BlockLZ4CompressorInputStream
+import app.aemu.archive.ArcStreams
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.IOException
@@ -12,7 +12,6 @@ import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.security.MessageDigest
-import java.util.zip.GZIPInputStream
 
 /**
  * Sony Xperia `.sin` partition images, the members of a Flashtool `.ftf` bundle (a ZIP: system.sin, kernel.sin,
@@ -196,9 +195,9 @@ internal object SonySin {
                     "LZ4A" -> {
                         val off = map.long; val plain = map.long; val packed = map.long; val fileOff = map.long
                         if (plain !in 0..MAX_BLOCK || packed !in 0..MAX_BLOCK) throw IOException("SIN v3: corrupt LZ4A record")
-                        val data = BlockLZ4CompressorInputStream(ByteArrayInputStream(read(src, dataOffset + off, packed.toInt()))).use { s ->
-                            ByteArray(plain.toInt()).also { readFully(s, it) }
-                        }
+                        val lz = read(src, dataOffset + off, packed.toInt())
+                        val data = ArcStreams.lz4Block(lz, 0, lz.size, plain.toInt())
+                        if (data.size != plain.toInt()) throw IOException("SIN v3: LZ4A block is short")
                         f.seek(fileOff)
                         f.write(data)
                         lz4++
@@ -222,7 +221,7 @@ internal object SonySin {
         if (!gz && !tar) throw IOException("$label: not a Sony SIN image")
         val raw = stream(src)
         val parts = ArrayList<File>()
-        TarArchiveInputStream(if (gz) GZIPInputStream(raw, 1 shl 16) else raw).use { t ->
+        TarArchiveInputStream(if (gz) ArcStreams.gzip(raw) else raw).use { t ->
             while (true) {
                 val e = t.nextEntry ?: break
                 if (cancelled()) throw IOException("cancelled")

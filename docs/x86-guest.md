@@ -36,7 +36,24 @@ Build these for x86 (Android NDK, `x86`/i686) and drop them in the `-x86` direct
 * `common-x86`: `libaemushim.so` (**built**, reduced: `native/guestshim/aemushim_x86.c`, see below), `aemu_true.so` (**built**: `native/guestshim/true_x86.S`, the exit(0) stand-in for iptables/ip6tables), `libaemurlimit.so`, `libaemuxattr.so`, `libshmshim.so`, `lights.default.so`, `camera.default.so`,
   `camera.aemu_host.so`, `sensors.aemu_host.so`, `sensors.default.so`, `libcamera.none.so`
 * `kk-x86`: `libashmemshim.so`, `libGLES.so`, `libGLES_split.so`, `libGLES_route.so`, `libGLES_aemu.so`,
-  `gralloc.default.so`, `audio.primary.default.so` (and the audio variants), `fbpaint`
+  `gralloc.default.so` (**built**, i386, bionic: the AOSP gralloc for x86 **Eclair** (API 5..7) with a bionic userland; it
+  handles a single-page fb0 with a plain ashmem buffer, so the firmware gralloc's module-mutex deadlock ("page flipping not
+  supported", FUTEX_WAIT right after the mmap of fb0) is gone. The 2026-11-17 rebuild also clears `HW_2D` / `HW_TEXTURE` for that
+  buffer (the pmem path took the module mutex a second time), see `native/gralloc-eclair`. Needs from the firmware: libcutils,
+  liblog, libstdc++ (operator new / delete), libc (incl. `__page_size`, `__errno`, `gettid`, `atexit`). `TreeFixer.installEngineFiles` parks the firmware's gralloc
+  (`system/.aemu-parked/system#lib#hw#gralloc.default.so.eclair`) and installs it; not for other API levels and not for a glibc
+  firmware (Google TV), which could not load it as it is; see `glibc-x86`), `audio.primary.default.so` (and the audio variants), `fbpaint`
+* `glibc-x86` (glibc Google TV firmware, Logitech Revue / Intel CE4100, glibc 2.7): the `libgdl`/`libgma`/`libismd_*`/`libclock_control`/`libGLES_CM`
+  stand-ins (`native/revue-shims`), and the Eclair gralloc for that userland: `gralloc.default.so` is `kk-x86/gralloc.default.so` with its
+  dynamic string table patched by `tools/patch_gralloc_glibc.py` (DT_NEEDED `libc.so`, `libstdc++.so`, `libm.so`, `libdl.so` -> `aegr.so`
+  (glibc has none of these names; a repeated DT_NEEDED is loaded once; the module calls nothing of libm / libdl), `pthread_mutex_*` ->
+  `aegr_mx_*`; `python3 tools/patch_gralloc_glibc.py <kk-x86 file> <glibc-x86 file>`, idempotent, nothing moves), `aegr.so` (**built**:
+  `native/revue-shims/build-aegr.sh`, freestanding i386: bionic's `__errno`, `gettid`, `atexit`, `__page_size`, operator new / delete
+  over glibc's malloc / free, the four mutex functions). `python3 tools/test_patch_gralloc_glibc.py` checks that both files are in
+  sync, that every import of the patched module is provided by aegr.so, glibc or the firmware's libcutils / liblog, and that
+  DT_NEEDED is down to `libcutils.so`, `liblog.so`, `aegr.so`.
+  `TreeFixer.glibcGralloc` installs both (aegr.so in `/lib`; the gralloc over every `gralloc.*.so` of the firmware's `system/lib/hw` and
+  `vendor/lib/hw`, the originals kept as `system/.aemu-parked/system#lib#hw#gralloc.<name>.so.glibc`).
 
 Until then an x86 firmware runs without the other shims: no ashmem/rlimit/xattr preload, no host camera and sensors, no GPU bridge.
 

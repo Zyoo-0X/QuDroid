@@ -79,6 +79,49 @@ object MediaCodecsPolicy {
         return changed
     }
 
+    /** AOSP's software audio decoders: component name, MIME type, the library SoftOMXPlugin loads for it */
+    private val SOFT_AUDIO = listOf(
+        Triple("OMX.google.mp3.decoder", "audio/mpeg", "libstagefright_soft_mp3dec.so"),
+        Triple("OMX.google.aac.decoder", "audio/mp4a-latm", "libstagefright_soft_aacdec.so"),
+        Triple("OMX.google.vorbis.decoder", "audio/vorbis", "libstagefright_soft_vorbisdec.so"),
+        Triple("OMX.google.amrnb.decoder", "audio/3gpp", "libstagefright_soft_amrdec.so"),
+        Triple("OMX.google.amrwb.decoder", "audio/amr-wb", "libstagefright_soft_amrdec.so"),
+        Triple("OMX.google.g711.alaw.decoder", "audio/g711-alaw", "libstagefright_soft_g711dec.so"),
+        Triple("OMX.google.g711.mlaw.decoder", "audio/g711-mlaw", "libstagefright_soft_g711dec.so"),
+        Triple("OMX.google.raw.decoder", "audio/raw", "libstagefright_soft_rawdec.so"),
+    )
+
+    /**
+     * Modified for AEmulator Plus, 2026-11-17: a board's media_codecs.xml that lists only its own audio decoders (MediaTek:
+     * OMX.MTK.AUDIO.DECODER.*, served by libstagefrighthw.so, which TreeFixer sets aside) leaves the guest with no
+     * audio decoder at all: "AwesomePlayer: unsupportted audio detected", MediaPlayer error 262 for every sound, SoundPool
+     * "Unable to load sample". The software decoders whose library is in the tree are put at the top of the <Decoders> block.
+     * Returns the codec names that were added; a file that already names a codec, or includes media_codecs_google_*.xml, is left as is.
+     */
+    fun ensureSoftwareAudio(root: File): List<String> {
+        val added = ArrayList<String>()
+        for (dir in ETC_DIRS) {
+            val f = File(root, "$dir/media_codecs.xml")
+            if (!f.isFile) continue
+            val xml = f.readText()
+            if (included(root, xml)) continue
+            val libs = listOf("system/lib", "vendor/lib", "system/vendor/lib").map { File(root, it) }
+            val missing = SOFT_AUDIO.filter { (name, _, lib) ->
+                !xml.contains("\"$name\"") && libs.any { File(it, lib).isFile }
+            }
+            if (missing.isEmpty()) continue
+            val open = Regex("<Decoders\\b[^>]*>").find(xml) ?: continue
+            val block = missing.joinToString("") { (n, t, _) -> "\n        <MediaCodec name=\"$n\" type=\"$t\" />" }
+            val backup = File(root, "$BACKUP_DIR/${("$dir/media_codecs.xml").replace('/', '#')}")
+            if (!backup.isFile) { backup.parentFile?.mkdirs(); backup.writeText(xml) }
+            f.setWritable(true)
+            f.writeText(xml.substring(0, open.range.last + 1) + block + xml.substring(open.range.last + 1))
+            f.setReadable(true, false)
+            added += missing.map { it.first }
+        }
+        return added
+    }
+
     private fun process(root: File, f: File, rel: String, enabled: Boolean): Boolean {
         val backup = File(root, "$BACKUP_DIR/${rel.replace('/', '#')}")
         if (!enabled) {
