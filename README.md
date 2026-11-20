@@ -53,14 +53,6 @@ cd AEmulator-Plus
 AEmulator Plus grew out of the HTC Desire HD and HTC One M7 emulators by [the original author](https://t.me/istratiit_ech) — their engine made this project possible.
 
 This is a modified fork of [uxazu/AEmulator](https://github.com/uxazu/AEmulator), which additionally uses many features from [drel4/AEmulator-Sunset](https://github.com/drel4/AEmulator-Sunset).
-## Links
-
-- My fork: [somerandomusernam2/AEmulator-Plus](https://github.com/somerandomusernam2/AEmulator-Plus)
-- Upstream: [uxazu/AEmulator](https://github.com/uxazu/AEmulator)
-- AEmulator-Sunset (huge credits for many features): [drel4/AEmulator-Sunset](https://github.com/drel4/AEmulator-Sunset)
-- Author: [somerandomusername2](https://github.com/somerandomusernam2)
-- Original author: [t.me/istratiit_ech](https://t.me/istratiit_ech)
-
 ### Contributors 
 - @RYuhMine - ZTE MMI images support, Wear SDK build fixes, ro.hardware value changer
 - @afonsocarolas - configurable emulated SIM cards, Wi-Fi, Portuguese (Portugal) translation, .sin and .ftf files importer, camera improvements, 3D UI and device skins
@@ -68,6 +60,14 @@ This is a modified fork of [uxazu/AEmulator](https://github.com/uxazu/AEmulator)
 - @power690 - host battery reporter improvements, host resolution setting fix, boot card never minimizing on native engine fix
 - @TwrpGuy - massive help with maintaining the ROM catalog and uploads to it
 - RVM on Telegram - improvements to Mali GPU support, fixes for Samsung Behold II
+
+## Links
+
+- My fork: [somerandomusernam2/AEmulator-Plus](https://github.com/somerandomusernam2/AEmulator-Plus)
+- Upstream: [uxazu/AEmulator](https://github.com/uxazu/AEmulator)
+- AEmulator-Sunset (huge credits for many features): [drel4/AEmulator-Sunset](https://github.com/drel4/AEmulator-Sunset)
+- Author: [somerandomusername2](https://github.com/somerandomusernam2)
+- Original author: [t.me/istratiit_ech](https://t.me/istratiit_ech)
 
 ## License
 
