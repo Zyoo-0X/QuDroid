@@ -63,7 +63,7 @@ This is a modified fork of [uxazu/AEmulator](https://github.com/uxazu/AEmulator)
 
 ### Contributors 
 - @RYuhMine - ZTE MMI images support, Wear SDK build fixes, ro.hardware value changer
-@afonsocarolas - configurable emulated SIM cards, Wi-Fi, Portuguese (Portugal) translation, .sin and .ftf files importer, camera improvements, 3D UI and device skins
+- @afonsocarolas - configurable emulated SIM cards, Wi-Fi, Portuguese (Portugal) translation, .sin and .ftf files importer, camera improvements, 3D UI and device skins
 - @felipevidal640-hue - Microphone support
 - @power690 - host battery reporter improvements, host resolution setting fix, boot card never minimizing on native engine fix
 - @TwrpGuy - massive help with maintaining the ROM catalog and uploads to it
