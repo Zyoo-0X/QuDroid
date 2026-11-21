@@ -1,7 +1,6 @@
 <img align="left" src="docs/assets/logo_app.png" width="128" alt="QuDroid" />
-###QuDroid
+### QuDroid
 Emulate Android firmware and Generic System Image
-
 <br clear="left"/>
 
 
