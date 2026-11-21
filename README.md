@@ -1,8 +1,9 @@
 <p align="center">
   <img src="docs/assets/logo_app.png" width="128" alt="QuDroid" /><br />
-  <b><font size="64">QuDroid</font></b><br />
-  <i>Android VM: Run Android On Android</i>
+  <span style="font-size: 64px; font-weight: bold; line-height: 1;">QuDroid</span><br />
+  <span style="font-size: 18px; font-style: italic;">Android VM: Run Android On Android</span>
 </p>
+
 
 
 
