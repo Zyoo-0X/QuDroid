@@ -49,11 +49,11 @@ val packEngines = tasks.register("packEngines") {
 tasks.named("preBuild") { dependsOn(packEngines) }
 
 android {
-    namespace = "app.aemu"
+    namespace = "app.qudroid"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "app.aemu.plus" // Modified for AEmulator Plus, 2026-10-04: single variant, no clone
+        applicationId = "app.qudroid.Zyoo-0X" // Modified for AEmulator Plus, 2026-10-04: single variant, no clone
         minSdk = 26
         // 28: гостевые бинарники запускаются из каталога данных приложения (W^X для targetSdk>=29)
         //noinspection ExpiredTargetSdkVersion
