@@ -1,13 +1,15 @@
-<p align="center">
-  <nobr>
-    <img src="docs/assets/logo_app.png" width="128" alt="QuDroid" style="vertical-align: middle; margin-right: 20px; border: none; display: inline;"/>
-    <span style="vertical-align: middle; text-align: left; display: inline;">
+<div align="center">
+  <div style="max-width: max-content; text-align: left;">
+    <img src="docs/assets/logo_app.png" width="128" alt="QuDroid" align="left" style="margin-right: 20px; border: none;"/>
+    <div style="padding-top: 12px;">
       <font size="7" color="#ffffff"><b>QuDroid</b></font>
       <br/>
       <font size="3" color="#8b949e">emulate android firmware and Generic System Image</font>
-    </span>
-  </nobr>
-</p>
+    </div>
+    <br clear="left"/>
+  </div>
+</div>
+
 
 
 
