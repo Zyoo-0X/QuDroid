@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/logo.png" width="128" alt="QuDroid"/>
+
 
 # AEmulator Plus
 
