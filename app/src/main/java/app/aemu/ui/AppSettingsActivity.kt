@@ -204,8 +204,6 @@ private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = pad.calculateTopPadding() + 8.dp, bottom = pad.calculateBottomPadding() + 32.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            item { AboutCard() }
-
             item {
                 Section(stringResource(R.string.catalog_title)) {
                     Row_(Icons.Rounded.List, stringResource(R.string.catalog_open), "") {
@@ -377,23 +375,6 @@ private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
         onInstall = { file -> AppUpdateManager.installApk(ctx, file) },
         onOpenUrl = { url -> open(url) }
     )
-}
-
-@Composable
-private fun AboutCard() {
-    Card(shape = MaterialTheme.shapes.extraLarge, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-        Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-            Image(painterResource(R.drawable.logo), null, Modifier.size(64.dp).clip(RoundedCornerShape(20.dp)))
-            Spacer(Modifier.width(16.dp))
-            Column(Modifier.weight(1f)) {
-                SunsetTitle(style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                Text(stringResource(R.string.as_version, BuildConfig.VERSION_NAME), style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer)
-                Spacer(Modifier.height(4.dp))
-                Text(stringResource(R.string.as_about), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
-            }
-        }
-    }
 }
 
 @Composable

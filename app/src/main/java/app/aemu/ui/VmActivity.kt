@@ -136,6 +136,9 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
@@ -1403,6 +1406,13 @@ open class VmActivity : ComponentActivity() {
     @Composable
     private fun Overlay() {
         var menu by ::menuOpen
+        var menuButtonVisible by remember { mutableStateOf(true) }
+        LaunchedEffect(menu, menuButtonVisible) {
+            if (!menu && menuButtonVisible) {
+                delay(5_000)
+                menuButtonVisible = false
+            }
+        }
         var dialog by remember { mutableStateOf(Dlg.NONE) }
         // recovery is "running" too, but has no Android behind am/pm/settings
         val running = state == GuestVm.State.RUNNING && !vm.recoveryMode
@@ -1496,14 +1506,33 @@ open class VmActivity : ComponentActivity() {
                 }
                 .onSizeChanged { menuSize = it }) {
                 if (!vm.settings.hideMenuButton) {
-                    FilledTonalIconButton(onClick = { menu = true }, modifier = Modifier.size(40.dp)) {
+                    FilledTonalIconButton(
+                        onClick = { menuButtonVisible = true; menu = true },
+                        modifier = Modifier.size(44.dp).alpha(if (menuButtonVisible || menu) 1f else 0f),
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = Color.Black.copy(alpha = 0.48f),
+                            contentColor = Color.White,
+                        ),
+                    ) {
                         Icon(Icons.Rounded.MoreVert, contentDescription = stringResource(R.string.menu))
                     }
                 } else {
                     // Keep a stable, non-interactive dropdown anchor when the button is hidden.
                     Spacer(Modifier.size(1.dp))
                 }
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                if (menu) ModalBottomSheet(
+                    onDismissRequest = { menu = false },
+                    sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false),
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    dragHandle = { androidx.compose.material3.BottomSheetDefaults.DragHandle() },
+                ) {
+                    Column(
+                        Modifier.fillMaxWidth().fillMaxHeight(0.86f)
+                            .verticalScroll(rememberScrollState())
+                            .padding(bottom = 24.dp)
+                    ) {
+                    Text("VM controls", style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
                     DropdownMenuItem(text = { Text(stringResource(R.string.log)) }, leadingIcon = { Icon(Icons.Rounded.Terminal, null) },
                         onClick = { menu = false; showLog = true })
                     // the tab closes, the machine keeps running (open it again from the library)
@@ -1593,6 +1622,7 @@ open class VmActivity : ComponentActivity() {
                         onClick = { menu = false; rebootVm(!vm.recoveryMode) })
                     DropdownMenuItem(text = { Text(stringResource(R.string.shutdown)) }, leadingIcon = { Icon(Icons.Rounded.Close, null) },
                         onClick = { menu = false; stopVm() })
+                    }
                 }
             }
             }
