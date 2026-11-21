@@ -1,13 +1,11 @@
+<img align="left" src="docs/assets/logo_app.png" width="96" alt="QuDroid" />
 
-  <tr>
-    <td valign="top" width="120">
-      <img src="docs/assets/logo_app.png" width="110" alt="QuDroid" />
-    </td>
-    <td valign="top">
-      <strong>QuDroid</strong><br />
-      Emulate almost any Android Firmware and Generic System Image directly on your modern phone. A fork of AEmulator packed with more features, enhanced compatibility, and bug fixes for running custom ROMs and legacy operating systems seamlessly.
-    </td>
-  </tr>
+<p>
+  <b>QuDroid</b><br />
+  Emulate almost any Android Firmware and Generic System Image directly on your modern phone. A fork of AEmulator packed with more features, enhanced compatibility, and bug fixes for running custom ROMs and legacy operating systems seamlessly.
+</p>
+
+<br clear="left" />
 
 
 
