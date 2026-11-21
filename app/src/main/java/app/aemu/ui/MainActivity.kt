@@ -57,7 +57,6 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Android
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Warning
@@ -71,7 +70,7 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LargeFlexibleTopAppBar
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
@@ -312,27 +311,26 @@ fun Library(model: LibraryModel) {
     Scaffold(
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
         topBar = {
-            LargeFlexibleTopAppBar(
-                title = { SunsetTitle() },
+            TopAppBar(
+                title = { Text("QuDroid", style = MaterialTheme.typography.titleLarge, maxLines = 1) },
                 actions = {
-                    IconButton(onClick = { ctx.startActivity(Intent(ctx, RomCatalogActivity::class.java)) }) {
-                        Icon(Icons.Rounded.List, stringResource(R.string.catalog_title))
+                    IconButton(onClick = { ctx.startActivity(Intent(ctx, AppSettingsActivity::class.java)) }) {
+                        Icon(Icons.Rounded.Settings, stringResource(R.string.settings))
                     }
-                    IconButton(onClick = { help = true }) { Icon(Icons.Rounded.Info, stringResource(R.string.help)) }
-                    IconButton(onClick = { ctx.startActivity(Intent(ctx, AppSettingsActivity::class.java)) }) { Icon(Icons.Rounded.Settings, stringResource(R.string.settings)) } },
+                    if (newHome) HomeFab(
+                        expanded = addMenu,
+                        onToggle = { addMenu = it },
+                        onImport = { pick.launch(arrayOf("*/*")) },
+                        onCatalog = { ctx.startActivity(Intent(ctx, RomCatalogActivity::class.java)) },
+                        onLibrary = { library = true },
+                        onNewFolder = { openNewFolder() },
+                    ) else {
+                        IconButton(onClick = { if (images.isEmpty()) pick.launch(arrayOf("*/*")) else addMenu = true }) {
+                            Icon(Icons.Rounded.Add, stringResource(R.string.add_firmware))
+                        }
+                    }
+                },
                 scrollBehavior = scroll,
-            )
-        },
-        floatingActionButton = {
-            if (newHome) HomeFab(expanded = addMenu, onToggle = { addMenu = it },
-                onImport = { pick.launch(arrayOf("*/*")) },
-                onCatalog = { ctx.startActivity(Intent(ctx, RomCatalogActivity::class.java)) },
-                onLibrary = { library = true }, onNewFolder = { openNewFolder() })
-            else ExtendedFloatingActionButton(
-                onClick = { if (images.isEmpty()) pick.launch(arrayOf("*/*")) else addMenu = true },
-                icon = { Icon(Icons.Rounded.Add, null) },
-                text = { Text(stringResource(R.string.add_firmware)) },
-                expanded = images.isEmpty() || !scroll.state.collapsedFraction.let { it > 0.5f },
             )
         },
     ) { pad ->

@@ -178,41 +178,36 @@ fun MachineCard(
             if (active) Box(Modifier.align(Alignment.TopStart).padding(12.dp).size(10.dp).background(Color(0xFF4CAF50), CircleShape))
         }
         Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp)) {
-            Text(img.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(img.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(img.displayVersion, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                listOfNotNull(
-                    img.settings.let { "${it.width}×${it.height}" },
-                    Formatter.formatShortFileSize(ctx, img.sizeBytes),
-                    if (img.lastBootMs > 0) "${img.lastBootMs / 1000} s" else null,
-                ).joinToString(" · "),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+                "${img.settings.width}×${img.settings.height} · ${Formatter.formatShortFileSize(ctx, img.sizeBytes)}",
+                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
             )
-            if (baseName != null) Text(stringResource(R.string.container_of, baseName), style = MaterialTheme.typography.bodySmall,
+            if (baseName != null) Text(stringResource(R.string.container_of, baseName), style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
 
-/** "+": an M3 Expressive FAB menu — import a firmware file, open the firmware library, or make a folder. */
+/** Compact add menu in the top app bar. */
 @Composable
 fun HomeFab(expanded: Boolean, onToggle: (Boolean) -> Unit, onImport: () -> Unit, onCatalog: () -> Unit, onLibrary: () -> Unit, onNewFolder: () -> Unit) {
-    FloatingActionButtonMenu(
-        expanded = expanded,
-        button = {
-            ToggleFloatingActionButton(checked = expanded, onCheckedChange = onToggle) {
-                val icon by remember { derivedStateOf { if (checkedProgress > 0.5f) Icons.Rounded.Close else Icons.Rounded.Add } }
-                Icon(rememberVectorPainter(icon), stringResource(R.string.add_firmware), Modifier.animateIcon({ checkedProgress }))
-            }
-        },
-    ) {
-        FloatingActionButtonMenuItem(onClick = { onToggle(false); onImport() }, icon = { Icon(Icons.Rounded.FileOpen, null) },
-            text = { Text(stringResource(R.string.add_import)) })
-        FloatingActionButtonMenuItem(onClick = { onToggle(false); onCatalog() }, icon = { Icon(Icons.Rounded.List, null) },
-            text = { Text(stringResource(R.string.catalog_title)) })
-        FloatingActionButtonMenuItem(onClick = { onToggle(false); onLibrary() }, icon = { Icon(Icons.Rounded.Inventory2, null) },
-            text = { Text(stringResource(R.string.lib_title)) })
-        FloatingActionButtonMenuItem(onClick = { onToggle(false); onNewFolder() }, icon = { Icon(Icons.Rounded.CreateNewFolder, null) },
-            text = { Text(stringResource(R.string.folder_new)) })
+    Box {
+        IconButton(onClick = { onToggle(!expanded) }) {
+            Icon(if (expanded) Icons.Rounded.Close else Icons.Rounded.Add, stringResource(R.string.add_firmware))
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { onToggle(false) }) {
+            DropdownMenuItem(text = { Text(stringResource(R.string.add_import)) }, leadingIcon = { Icon(Icons.Rounded.FileOpen, null) },
+                onClick = { onToggle(false); onImport() })
+            DropdownMenuItem(text = { Text(stringResource(R.string.catalog_title)) }, leadingIcon = { Icon(Icons.Rounded.List, null) },
+                onClick = { onToggle(false); onCatalog() })
+            DropdownMenuItem(text = { Text(stringResource(R.string.lib_title)) }, leadingIcon = { Icon(Icons.Rounded.Inventory2, null) },
+                onClick = { onToggle(false); onLibrary() })
+            DropdownMenuItem(text = { Text(stringResource(R.string.folder_new)) }, leadingIcon = { Icon(Icons.Rounded.CreateNewFolder, null) },
+                onClick = { onToggle(false); onNewFolder() })
+        }
     }
 }
 
