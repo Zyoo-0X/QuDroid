@@ -1,9 +1,8 @@
 <p align="center">
   <img src="docs/assets/logo_app.png" width="128" alt="QuDroid" />
 </p>
-<p align="center">
-  # QuDroid
-</p>
+<h1 align="center">QuDroid</h1>
+
 
 ## QuDroid
 **Emulate almost any Android firmware — HTC Sense, TouchWiz, MIUI, AOSP — on a modern phone.** A fork of [AEmulator](https://github.com/uxazu/AEmulator) with more features and fixes.
