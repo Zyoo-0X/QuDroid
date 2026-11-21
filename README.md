@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/assets/logo_app.png" width="128" /><h1>QuDroid</h1>
+  <img src="docs/assets/logo_app.png" width="128"/h1>
 </div>
 
 
