@@ -4,19 +4,22 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'APK version'
+        description: "Release version (example: 1.0.0)"
         required: true
         type: string
-        default: '1.0.0'
+        default: "1.0.0"
 
 permissions:
   contents: write
 
 jobs:
   build:
-    name: Build and release APK
+    name: Build and publish APK
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
 
     steps:
       - name: Checkout source
@@ -33,44 +36,79 @@ jobs:
             exit 1
           fi
 
-      - name: Set Android version
+      # GitHub-hosted Ubuntu runners already include Android command-line tools.
+      # Avoid android-actions/setup-android: its legacy "tools" package request
+      # can fail because that SDK package no longer exists.
+      - name: Locate Android SDK tools
         shell: bash
-        env:
-          APP_VERSION: ${{ inputs.version }}
         run: |
-          python3 - <<'PY'
-          import os, re
-          from pathlib import Path
+          if [[ ! -d "$ANDROID_HOME" ]]; then
+            echo "Android SDK was not found at $ANDROID_HOME"
+            exit 1
+          fi
 
-          path = Path('app/build.gradle.kts')
-          source = path.read_text(encoding='utf-8')
-          version = os.environ['APP_VERSION']
-          pattern = r'versionName\s*=\s*"[^"]*"'
-          updated, count = re.subn(pattern, f'versionName = "{version}"', source, count=1)
-          if count != 1:
-              raise SystemExit('Could not find versionName in app/build.gradle.kts')
-          path.write_text(updated, encoding='utf-8')
-          print(f'Building APK version {version}')
-          PY
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager 2>/dev/null | sort -V | tail -n 1)"
+          if [[ -z "$SDKMANAGER" ]]; then
+            echo "sdkmanager was not found in $ANDROID_HOME/cmdline-tools"
+            exit 1
+          fi
+
+          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
+
+      - name: Install required Android SDK packages
+        shell: bash
+        run: |
+          yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses || true
+          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --install \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;36.0.0"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
+          cache: gradle
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Set APK version
+        shell: bash
+        env:
+          APP_VERSION: ${{ inputs.version }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
 
-      - name: Accept Android licenses
-        run: yes | sdkmanager --licenses || true
+          gradle_file = Path("app/build.gradle.kts")
+          if not gradle_file.is_file():
+              raise SystemExit("Cannot find app/build.gradle.kts. Make sure the repository root contains the Android project.")
 
-      - name: Build release APK
+          source = gradle_file.read_text(encoding="utf-8")
+          version = os.environ["APP_VERSION"]
+          updated, count = re.subn(
+              r'versionName\s*=\s*"[^"]*"',
+              f'versionName = "{version}"',
+              source,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit("Could not find versionName in app/build.gradle.kts")
+
+          gradle_file.write_text(updated, encoding="utf-8")
+          print(f"Building QuDroid version {version}")
+          PY
+
+      - name: Build APK
+        shell: bash
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon --stacktrace assembleRelease assembleDebug
+          ./gradlew --no-daemon --stacktrace :app:assembleRelease :app:assembleDebug
 
-      - name: Prepare release APK
+      - name: Prepare APK release asset
         id: apk
         shell: bash
         env:
@@ -79,18 +117,18 @@ jobs:
           RELEASE_APK="app/build/outputs/apk/release/app-release.apk"
           DEBUG_APK="app/build/outputs/apk/debug/app-debug.apk"
 
-          # Prefer a signed release APK. If no keystore is configured in the
-          # repository, publish the automatically debug-signed APK instead.
-          if [[ -f "$RELEASE_APK" ]] && "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)/apksigner" verify "$RELEASE_APK" >/dev/null 2>&1; then
+          if [[ -f "$RELEASE_APK" ]] && "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify "$RELEASE_APK" >/dev/null 2>&1; then
             APK="$RELEASE_APK"
+            echo "Using signed release APK."
           elif [[ -f "$DEBUG_APK" ]]; then
             APK="$DEBUG_APK"
-            echo 'No release keystore configured; publishing the debug-signed APK.'
+            echo "No release keystore is configured; using the debug-signed APK."
           else
-            echo 'APK was not generated.'
-            find app/build/outputs -maxdepth 5 -type f -print || true
+            echo "Build completed but no APK was found."
+            find app/build/outputs -type f -print || true
             exit 1
           fi
+
           mkdir -p release-files
           cp "$APK" "release-files/QuDroid-${APP_VERSION}.apk"
           echo "file=release-files/QuDroid-${APP_VERSION}.apk" >> "$GITHUB_OUTPUT"
