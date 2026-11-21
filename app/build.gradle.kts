@@ -49,7 +49,7 @@ val packEngines = tasks.register("packEngines") {
 tasks.named("preBuild") { dependsOn(packEngines) }
 
 android {
-    namespace = "app.qudroid"
+    namespace = "app.aemu"
     compileSdk = 36
 
     defaultConfig {
