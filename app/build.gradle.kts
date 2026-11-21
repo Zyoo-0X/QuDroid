@@ -53,7 +53,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "app.qudroid.zyoo_0x" // Modified for AEmulator Plus, 2026-10-04: single variant, no clone
+        applicationId = "app.qudroid.zyoo0x" // Modified for AEmulator Plus, 2026-10-04: single variant, no clone
         minSdk = 26
         // 28: гостевые бинарники запускаются из каталога данных приложения (W^X для targetSdk>=29)
         //noinspection ExpiredTargetSdkVersion
