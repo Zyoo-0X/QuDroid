@@ -1,11 +1,9 @@
 <div align="center">
   <img src="docs/assets/logo_app.png" width="128" alt="QuDroid" />
-  <br/>
-  <b><font size="6">QuDroid</font></b>
-  <br/>
-  <sub>Emulate Android firmware and Generic System Image</sub>
+  <br/><br/>
+  <b>QuDroid</b><br/>
+  Emulate Android firmware and Generic System Image
 </div>
-
 
 
 
