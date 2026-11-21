@@ -1,14 +1,11 @@
-<div align="center">
-  <img src="docs/assets/logo_app.png" width="128" alt="QuDroid" style="vertical-align: middle; margin-right: 20px;"/>
-  <h1 style="display: inline-block; vertical-align: middle; text-align: left; border: none; padding: 0; margin: 0;">
-    <span style="font-size: 54px; font-weight: 900; color: #ffffff; display: block; line-height: 1;">
-      QuDroid
-    </span>
-    <span style="font-size: 16px; font-weight: 400; color: #8b949e; display: block; margin-top: 8px; letter-spacing: 0.2px;">
-      emulate android firmware and Generic System Image
-    </span>
-  </h1>
-</div>
+<p align="center">
+  <img src="docs/assets/logo_app.png" width="128" alt="QuDroid" align="center" style="margin-right: 15px; border: none;"/>
+  <span style="display: inline-block; text-align: left; vertical-align: middle; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;">
+    <span style="font-size: 50px; font-weight: 900; color: #ffffff; display: block; line-height: 1;">QuDroid</span>
+    <span style="font-size: 16px; font-weight: 400; color: #8b949e; display: block; margin-top: 5px;">emulate android firmware and Generic System Image</span>
+  </span>
+</p>
+
 
 
 
