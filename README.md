@@ -1,16 +1,21 @@
 <div align="center">
-  <div style="display: flex; align-items: center; justify-content: center; gap: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;">
-    <img src="docs/assets/logo_app.png" width="128" alt="QuDroid" style="display: block;"/>
-    <div style="text-align: left;">
-      <div style="font-size: 48px; font-weight: 800; letter-spacing: -1px; line-height: 1.1; color: #ffffff;">
-        QuDroid
-      </div>
-      <div style="font-size: 16px; font-weight: 400; color: #8b949e; margin-top: 6px; letter-spacing: 0.2px;">
-        emulate android firmware and Generic System Image
-      </div>
-    </div>
-  </div>
+  <table border="0" cellpadding="0" cellspacing="0" style="border: none; border-collapse: collapse; background: transparent;">
+    <tr style="border: none; background: transparent;">
+      <td style="border: none; padding: 0; background: transparent; vertical-align: middle;">
+        <img src="docs/assets/logo_app.png" width="128" alt="QuDroid" style="display: block; border: none;"/>
+      </td>
+      <td style="border: none; padding-left: 24px; text-align: left; vertical-align: middle; background: transparent; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;">
+        <span style="font-size: 54px; font-weight: 900; color: #ffffff; line-height: 1; display: block; letter-spacing: -1px; margin-bottom: 8px;">
+          QuDroid
+        </span>
+        <span style="font-size: 16px; font-weight: 400; color: #8b949e; display: block; letter-spacing: 0.2px;">
+          emulate android firmware and Generic System Image
+        </span>
+      </td>
+    </tr>
+  </table>
 </div>
+
 
 
 
