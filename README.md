@@ -1,8 +1,23 @@
 <div align="center">
+  <table border="0" cellpadding="0" cellspacing="0" style="border-collapse: collapse; border: none;">
+    <tr>
+      <td style="border: none; padding: 0;">
+        <img src="docs/assets/logo_app.png" width="128" alt="QuDroid" style="display: block;"/>
+      </td>
+      <td style="border: none; padding-left: 20px; text-align: left; vertical-align: middle; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;">
+        <div style="font-size: 36px; font-weight: 800; letter-spacing: -0.5px; line-height: 1.2; color: #24292e;">
+          QuDroid
+        </div>
+        <div style="font-size: 16px; font-weight: 400; color: #57606a; margin-top: 4px; letter-spacing: 0.2px;">
+          emulate android firmware and Generic System Image
+        </div>
+      </td>
+    </tr>
+  </table>
+</div>
 
-<img src="docs/assets/logo.png" width="128" alt="QuDroid"/>
 
-# AEmulator Plus
+# QuDroid
 
 **Emulate almost any Android firmware — HTC Sense, TouchWiz, MIUI, AOSP — on a modern phone.** A fork of [AEmulator](https://github.com/uxazu/AEmulator) with more features and fixes.
 
