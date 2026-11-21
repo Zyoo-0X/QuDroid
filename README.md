@@ -1,5 +1,4 @@
 <div align="center">
-  <table frame="void" rules="none" border="0" cellspacing="0" cellpadding="0" style="border-style: none !important; border-width: 0 !important; border-collapse: collapse; background: transparent;">
     <tr style="border: none; background: transparent;">
       <td style="border: none; padding: 0; background: transparent; vertical-align: middle;">
         <img src="docs/assets/logo_app.png" width="128" alt="QuDroid" style="display: block; border: none;"/>
@@ -10,7 +9,6 @@
         <font size="3" color="#8b949e">emulate android firmware and Generic System Image</font>
       </td>
     </tr>
-  </table>
 </div>
 
 
