@@ -1,14 +1,18 @@
-<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; margin-bottom: 20px;">
-  <img src="docs/assets/logo_app.png" width="128" alt="QuDroid" align="left" style="margin-right: 20px; border: none;"/>
-  <div style="padding-top: 15px;">
-    <h1 style="font-size: 56px; font-weight: 900; color: #ffffff; margin: 0; padding: 0; border: none; line-height: 1.1;">
-      QuDroid
-    </h1>
-    <p style="font-size: 16px; font-weight: 400; color: #8b949e; margin: 8px 0 0 0; padding: 0; line-height: 1.4;">
-      emulate android firmware and Generic System Image
-    </p>
+<div align="center">
+  <div style="display: inline-block; text-align: left; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;">
+    <div style="float: left; margin-right: 24px;">
+      <img src="docs/assets/logo_app.png" width="128" alt="QuDroid" style="display: block; border: none;"/>
+    </div>
+    <div style="float: left; padding-top: 14px;">
+      <div style="font-size: 56px; font-weight: 900; color: #ffffff; line-height: 1; margin: 0; padding: 0;">
+        QuDroid
+      </div>
+      <div style="font-size: 16px; font-weight: 400; color: #8b949e; margin-top: 10px; padding: 0; letter-spacing: 0.2px;">
+        emulate android firmware and Generic System Image
+      </div>
+    </div>
+    <div style="clear: both;"></div>
   </div>
-  <br clear="left"/>
 </div>
 
 
