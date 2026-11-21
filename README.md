@@ -1,8 +1,9 @@
 <div align="center">
-  <img src="docs/assets/logo_app.png" width="128" alt="QuDroid" />
-  <div style="font-size: 350%; font-weight: bold; line-height: 1;">QuDroid</div>
-  <div style="font-size: 110%; font-style: italic; line-height: 1;">Android VM: Run Android On Android</div>
+  <img src="docs/assets/logo_app.png" width="128" alt="QuDroid" style="display: block; margin: 0 auto;" />
+  <div style="font-size: 350%; font-weight: bold; line-height: 1; margin: 0; padding: 0;">QuDroid</div>
+  <div style="font-size: 110%; font-style: italic; line-height: 1; margin: 0; padding: 0;">Android VM: Run Android On Android</div>
 </div>
+
 
 
 
