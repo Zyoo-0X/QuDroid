@@ -1,5 +1,6 @@
 <div align="center">
   <img src="docs/assets/logo_app.png" width="128"/h1>
+  <h1 style="margin: 0; padding: 0; font-size: 64px;">QuDroid</h1>
 </div>
 
 
