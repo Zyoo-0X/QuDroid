@@ -1,10 +1,10 @@
 <p align="center">
   <img src="docs/assets/logo_app.png" width="128" alt="QuDroid" />
 </p>
-<h1 align="center">QuDroid</h1>
-<h2 align="center"> - Android VM Run Android On Android</h2>
 
- - Android VM Run Android On Android
+<h1 align="center">QuDroid</h1>
+<p align="center"><i>Android VM: Run Android On Android</i></p>
+
 
 ## QuDroid
 **Emulate almost any Android firmware — HTC Sense, TouchWiz, MIUI, AOSP — on a modern phone.** A fork of [AEmulator](https://github.com/uxazu/AEmulator) with more features and fixes.
