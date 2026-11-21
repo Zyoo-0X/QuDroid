@@ -3,8 +3,6 @@
   <h1 style="margin: 0; padding: 0; font-size: 64px;">QuDroid</h1>
 </div>
 
-# QuDroid
-
 Emulate Android 1.0–17 firmware—including HTC Sense, TouchWiz, MIUI, and AOSP—on a modern phone. A fork of [AEmulator](https://github.com/uxazu/AEmulator) with additional features and fixes.
 
 [English](README.md) · [Русский](docs/i18n/README.ru.md) · [Українська](docs/i18n/README.uk.md) · [Deutsch](docs/i18n/README.de.md) · [Français](docs/i18n/README.fr.md) · [Español](docs/i18n/README.es.md) · [Português](docs/i18n/README.pt-BR.md) · [Italiano](docs/i18n/README.it.md) · [Polski](docs/i18n/README.pl.md) · [Türkçe](docs/i18n/README.tr.md) · [العربية](docs/i18n/README.ar.md) · [فارسی](docs/i18n/README.fa.md) · [हिन्दी](docs/i18n/README.hi.md) · [Indonesia](docs/i18n/README.id.md) · [Tiếng Việt](docs/i18n/README.vi.md) · [简体中文](docs/i18n/README.zh-CN.md) · [日本語](docs/i18n/README.ja.md) · [한국어](docs/i18n/README.ko.md)
