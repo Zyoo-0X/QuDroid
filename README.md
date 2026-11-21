@@ -1,18 +1,19 @@
 <div align="center">
-  <div style="display: inline-block; text-align: left; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;">
-    <div style="float: left; margin-right: 24px;">
-      <img src="docs/assets/logo_app.png" width="128" alt="QuDroid" style="display: block; border: none;"/>
-    </div>
-    <div style="float: left; padding-top: 14px;">
-      <div style="font-size: 56px; font-weight: 900; color: #ffffff; line-height: 1; margin: 0; padding: 0;">
-        QuDroid
-      </div>
-      <div style="font-size: 16px; font-weight: 400; color: #8b949e; margin-top: 10px; padding: 0; letter-spacing: 0.2px;">
-        emulate android firmware and Generic System Image
-      </div>
-    </div>
-    <div style="clear: both;"></div>
-  </div>
+  <table summary="header" style="border: none !important; border-collapse: collapse !important; background: transparent !important; margin: 0 auto;">
+    <tr style="border: none !important; background: transparent !important;">
+      <td style="border: none !important; padding: 0 !important; background: transparent !important; vertical-align: middle;">
+        <img src="docs/assets/logo_app.png" width="128" alt="QuDroid" style="display: block; border: none !important; max-width: none;"/>
+      </td>
+      <td style="border: none !important; padding: 0 0 0 24px !important; text-align: left; vertical-align: middle; background: transparent !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;">
+        <div style="font-size: 54px; font-weight: 900; color: #ffffff; line-height: 1; margin: 0; padding: 0;">
+          QuDroid
+        </div>
+        <div style="font-size: 16px; font-weight: 400; color: #8b949e; margin: 10px 0 0 0; padding: 0; letter-spacing: 0.2px; white-space: nowrap;">
+          emulate android firmware and Generic System Image
+        </div>
+      </td>
+    </tr>
+  </table>
 </div>
 
 
