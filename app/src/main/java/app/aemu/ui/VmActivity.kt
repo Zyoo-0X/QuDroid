@@ -202,6 +202,7 @@ object VmHost {
             vm = null
             // GL-мост нельзя поднять повторно в том же процессе — процесс уходит вместе с машиной
             Thread.sleep(300)
+            runCatching { app.aemu.core.SystemUiLock.releaseIfIdle(app) }
             android.os.Process.killProcess(android.os.Process.myPid())
         }
     }
@@ -539,7 +540,10 @@ open class VmActivity : ComponentActivity() {
                 when (VmUiPolicy.back(showLog, vm.settings.hideMenuButton)) {
                     VmUiPolicy.BackAction.CLOSE_LOG -> { showLog = false; menuOpen = false }
                     VmUiPolicy.BackAction.OPEN_MENU -> menuOpen = true
-                    VmUiPolicy.BackAction.GUEST_BACK -> vm.input.press(InputService.KEY_BACK)
+                    // Settings > Shizuku > Disable back: the phone's Back does nothing here (the machine has its own Back key)
+                    VmUiPolicy.BackAction.GUEST_BACK -> app.aemu.core.ShizukuLockStore.read(applicationContext).let { o ->
+                        if (!(o.enabled && o.back)) vm.input.press(InputService.KEY_BACK)
+                    }
                 }
             }
         })
@@ -584,9 +588,11 @@ open class VmActivity : ComponentActivity() {
         applyCutoutBarrier()
         orientationListener?.enable()
         if (::vm.isInitialized) { vm.cameraVisible(true); vm.micVisible(true); vm.motionVisible(true); if (vm.engine == Engine.N64) vm.sensors.resume(true) }
+        app.aemu.core.SystemUiLock.resume(this, this) // Shizuku: notifications / quick settings / Home / Back, as chosen in Settings
     }
 
     override fun onPause() {
+        app.aemu.core.SystemUiLock.pause(this, this)
         captureThumbnail()
         orientationListener?.disable()
         heldNavKeys.releaseAll()
@@ -734,6 +740,20 @@ open class VmActivity : ComponentActivity() {
         )
     }
 
+    /** The tabs live in the machine menu now: the same chips as the old bar (switch, close), inside the menu sheet. */
+    @Composable
+    private fun TabsInMenu() {
+        val tabs by rememberVmTabs()
+        Text("Tabs", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+        VmTabStrip(
+            tabs = tabs, current = vm.img.id, topInset = false, allowSplitDrag = false, inSplit = panePos != null,
+            onCloseCurrent = { shutdown -> if (shutdown) stopVm() else minimizeTab() },
+            modifier = Modifier.padding(horizontal = 16.dp).clip(RoundedCornerShape(20.dp)),
+        )
+        HorizontalDivider(Modifier.padding(top = 12.dp, bottom = 4.dp))
+    }
+
     /**
      * Fits this window to its tab. In a tab of two machines each machine has a window of its own, half of the screen, with
      * its own tab bar, navigation bar and menu button: the base window is a normal fullscreen-type window made smaller, the
@@ -758,7 +778,7 @@ open class VmActivity : ComponentActivity() {
     }
 
     /** one tab bar per screen: the bottom half has none (left and right halves both touch the top); the person can fold it away */
-    private fun tabBarShown() = panePos != 'B' && !tabBarHidden
+    private fun tabBarShown() = false // the tabs are in the menu (see TabsInMenu); no bar over the screen
 
     private fun applyTabBar() {
         tabStripView?.visibility = if (tabBarShown()) android.view.View.VISIBLE else android.view.View.GONE
@@ -833,6 +853,7 @@ open class VmActivity : ComponentActivity() {
             runOnUiThread { if (!isDestroyed) { if (inFront) TabNav.go(this, next); finish() } }
             Thread.sleep(300)
             // GL-мост нельзя поднять повторно в том же процессе — процесс :vm уходит вместе с машиной
+            runCatching { app.aemu.core.SystemUiLock.releaseIfIdle(app) }
             android.os.Process.killProcess(android.os.Process.myPid())
         }
     }
@@ -1398,7 +1419,7 @@ open class VmActivity : ComponentActivity() {
         try { VmRestartActivity.handoff(applicationContext, id, recovery, processLifetime, lowPower) }
         catch (_: Exception) { endingVm.set(false); toast(getString(R.string.vm_restart_failed)); return }
         finish()
-        android.os.Process.killProcess(android.os.Process.myPid())
+        Thread { runCatching { app.aemu.core.SystemUiLock.releaseIfIdle(applicationContext) }; android.os.Process.killProcess(android.os.Process.myPid()) }.start()
     }
 
     // ------------------------------------------------------------------ интерфейс поверх экрана
@@ -1409,10 +1430,13 @@ open class VmActivity : ComponentActivity() {
         var menuButtonVisible by remember { mutableStateOf(true) }
         LaunchedEffect(menu, menuButtonVisible) {
             if (!menu && menuButtonVisible) {
-                delay(5_000)
+                delay(3_000)
                 menuButtonVisible = false
             }
         }
+        // never gone: faint while untouched, solid after a tap (and while the menu is open)
+        val menuAlpha by androidx.compose.animation.core.animateFloatAsState(
+            if (menuButtonVisible || menu) 1f else 0.3f, label = "menuAlpha")
         var dialog by remember { mutableStateOf(Dlg.NONE) }
         // recovery is "running" too, but has no Android behind am/pm/settings
         val running = state == GuestVm.State.RUNNING && !vm.recoveryMode
@@ -1444,7 +1468,7 @@ open class VmActivity : ComponentActivity() {
         val cardMinimized = cardOverride ?: (state == GuestVm.State.BOOTING)
         val bootCard = state != GuestVm.State.RUNNING && !showLog && (state == GuestVm.State.FAILED || !cardMinimized)
         // with the tab bar folded away, a tiny arrow at the top right brings it back
-        val revealArrow = tabBarHidden && panePos != 'B'
+        val revealArrow = false
         Box(Modifier.fillMaxSize()) {
             if (bootCard) Box(Modifier.fillMaxSize().pointerInput(state) {
                 detectTapGestures {
@@ -1508,7 +1532,7 @@ open class VmActivity : ComponentActivity() {
                 if (!vm.settings.hideMenuButton) {
                     FilledTonalIconButton(
                         onClick = { menuButtonVisible = true; menu = true },
-                        modifier = Modifier.size(44.dp).alpha(if (menuButtonVisible || menu) 1f else 0f),
+                        modifier = Modifier.size(44.dp).alpha(menuAlpha),
                         colors = IconButtonDefaults.filledTonalIconButtonColors(
                             containerColor = Color.Black.copy(alpha = 0.48f),
                             contentColor = Color.White,
@@ -1533,6 +1557,7 @@ open class VmActivity : ComponentActivity() {
                     ) {
                     Text("VM controls", style = MaterialTheme.typography.titleLarge,
                         modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+                    TabsInMenu()
                     DropdownMenuItem(text = { Text(stringResource(R.string.log)) }, leadingIcon = { Icon(Icons.Rounded.Terminal, null) },
                         onClick = { menu = false; showLog = true })
                     // the tab closes, the machine keeps running (open it again from the library)

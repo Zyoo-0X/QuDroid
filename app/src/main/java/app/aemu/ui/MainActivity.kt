@@ -168,6 +168,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         if (styleOf(applicationContext) != style) { recreate(); return }
         model.refresh()
+        Thread { app.aemu.core.SystemUiLock.releaseIfIdle(applicationContext) }.start()
     }
 
     private fun handleView(i: Intent?) {
@@ -234,8 +235,8 @@ fun Library(model: LibraryModel) {
     var deleteFor by remember { mutableStateOf<GuestImage?>(null) }
     var resetFor by remember { mutableStateOf<GuestImage?>(null) }
     var renameFor by remember { mutableStateOf<GuestImage?>(null) }
-    var help by remember { mutableStateOf(false) }
     var addMenu by remember { mutableStateOf(false) }
+    var homeMenu by remember { mutableStateOf(false) }
     var library by remember { mutableStateOf(false) }
     var containerFrom by remember { mutableStateOf<GuestImage?>(null) }
     // 3D library is an opt-in app setting; re-read it when returning from Settings
@@ -313,26 +314,11 @@ fun Library(model: LibraryModel) {
         topBar = {
             TopAppBar(
                 title = { Text("QuDroid", style = MaterialTheme.typography.titleLarge, maxLines = 1) },
-                actions = {
-                    IconButton(onClick = { ctx.startActivity(Intent(ctx, AppSettingsActivity::class.java)) }) {
-                        Icon(Icons.Rounded.Settings, stringResource(R.string.settings))
-                    }
-                    if (newHome) HomeFab(
-                        expanded = addMenu,
-                        onToggle = { addMenu = it },
-                        onImport = { pick.launch(arrayOf("*/*")) },
-                        onCatalog = { ctx.startActivity(Intent(ctx, RomCatalogActivity::class.java)) },
-                        onLibrary = { library = true },
-                        onNewFolder = { openNewFolder() },
-                    ) else {
-                        IconButton(onClick = { if (images.isEmpty()) pick.launch(arrayOf("*/*")) else addMenu = true }) {
-                            Icon(Icons.Rounded.Add, stringResource(R.string.add_firmware))
-                        }
-                    }
-                },
                 scrollBehavior = scroll,
             )
         },
+        // Add and Settings live in the menu at the bottom (like the machine menu)
+        floatingActionButton = { HomeMenuButton(onClick = { homeMenu = true }) },
     ) { pad ->
         if (newHome) {
             val full: androidx.compose.foundation.lazy.grid.LazyGridItemSpanScope.() -> androidx.compose.foundation.lazy.grid.GridItemSpan =
@@ -355,7 +341,7 @@ fun Library(model: LibraryModel) {
                         ImportCard(imp, onCancel = model::cancelImport, onDismiss = model::dismissImport)
                     }
                 }
-                if (images.isEmpty() && !imp.active) item(span = full) { EmptyState(onHelp = { help = true }) }
+                if (images.isEmpty() && !imp.active) item(span = full) { EmptyState() }
                 items(rows.size, key = { rows[it].key },
                     span = { i -> if (rows[i] is FolderRow) GridItemSpan(maxLineSpan) else GridItemSpan(1) }) { i ->
                     when (val row = rows[i]) {
@@ -391,7 +377,7 @@ fun Library(model: LibraryModel) {
             }
         } else {
             Box(Modifier.fillMaxSize().padding(pad)) {
-                if (images.isEmpty() && !imp.active) EmptyState(onHelp = { help = true })
+                if (images.isEmpty() && !imp.active) EmptyState()
                 if (view3d && images.isNotEmpty()) Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
                     .padding(start = 16.dp, end = 16.dp, bottom = 120.dp)) {
                     StorageAccessCard()
@@ -548,7 +534,16 @@ fun Library(model: LibraryModel) {
             },
             onNew = { openNewFolder(img.id); moveFor = null })
     }
-    if (help) HelpDialog(onDismiss = { help = false })
+    if (homeMenu) HomeMenuSheet(
+        newHome = newHome,
+        onDismiss = { homeMenu = false },
+        onImport = { homeMenu = false; pick.launch(arrayOf("*/*")) },
+        onCatalog = { homeMenu = false; ctx.startActivity(Intent(ctx, RomCatalogActivity::class.java)) },
+        onLibrary = { homeMenu = false; library = true },
+        onNewFolder = { homeMenu = false; openNewFolder() },
+        onAdd = { homeMenu = false; if (images.isEmpty()) pick.launch(arrayOf("*/*")) else addMenu = true },
+        onSettings = { homeMenu = false; ctx.startActivity(Intent(ctx, AppSettingsActivity::class.java)) },
+    )
     if (!newHome && addMenu) AddSheet(images, onDismiss = { addMenu = false },
         onImport = { addMenu = false; pick.launch(arrayOf("*/*")) },
         onCatalog = { addMenu = false; ctx.startActivity(Intent(ctx, RomCatalogActivity::class.java)) },
@@ -795,19 +790,13 @@ private fun StorageAccessCard() {
 }
 
 @Composable
-private fun EmptyState(onHelp: () -> Unit) {
+private fun EmptyState() {
     Column(Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(112.dp)) {
             Box(contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Android, null, Modifier.size(56.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer) }
         }
         Spacer(Modifier.height(24.dp))
         Text(stringResource(R.string.empty_title), style = MaterialTheme.typography.headlineSmall)
-        Spacer(Modifier.height(8.dp))
-        Text(stringResource(R.string.empty_text),
-            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-        Spacer(Modifier.height(16.dp))
-        TextButton(onClick = onHelp) { Text(stringResource(R.string.empty_help)) }
     }
 }
 

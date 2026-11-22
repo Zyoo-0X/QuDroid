@@ -41,6 +41,7 @@ import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material.icons.rounded.List
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.Card
@@ -57,6 +58,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -92,8 +94,9 @@ import app.aemu.R
 /** Modified for AEmulator Sunset on 2026-09-30: fork links and attribution.
  * Modified for AEmulator Plus on 2026-10-04: Plus links; Sunset and original credited as upstream. */
 object Links {
-    const val GITHUB = "https://github.com/somerandomusernam2/AEmulator-Plus"
-    const val AUTHOR = "https://github.com/somerandomusernam2"
+    const val GITHUB = "https://github.com/Zyoo-0X/QuDroid"
+    const val AUTHOR = "https://github.com/Zyoo-0X"
+    const val PLUS = "https://github.com/somerandomusernam2/AEmulator-Plus"
     const val SUNSET = "https://github.com/drel4/AEmulator-Sunset"
     const val UPSTREAM = "https://github.com/uxazu/AEmulator"
     const val ORIGINAL = "https://t.me/istratiit_ech"
@@ -193,9 +196,9 @@ private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
     Scaffold(
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
         topBar = {
-            LargeFlexibleTopAppBar(
-                title = { Text(stringResource(R.string.settings)) },
+            TopAppBar(
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.back)) } },
+                title = { Text(stringResource(R.string.settings), style = MaterialTheme.typography.titleLarge, maxLines = 1) },
                 scrollBehavior = scroll,
             )
         },
@@ -309,11 +312,14 @@ private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
                 }
             }
 
+            item { ShizukuSettings() }
+
             item {
                 Section(stringResource(R.string.as_links)) {
-                    Row_(Icons.Rounded.Person, stringResource(R.string.as_author), "somerandomusername2") { open(Links.AUTHOR) }
+                    Row_(Icons.Rounded.Person, stringResource(R.string.as_author), "Zyoo-0X") { open(Links.AUTHOR) }
                     Row_(Icons.Rounded.History, stringResource(R.string.as_orig), "t.me/istratiit_ech") { open(Links.ORIGINAL) }
-                    Row_(Icons.Rounded.Code, stringResource(R.string.as_github), "github.com/somerandomusernam2/AEmulator-Plus") { open(Links.GITHUB) }
+                    Row_(Icons.Rounded.Code, stringResource(R.string.as_github), "github.com/Zyoo-0X/QuDroid") { open(Links.GITHUB) }
+                    Row_(Icons.Rounded.History, stringResource(R.string.as_upstream_row, "AEmulator Plus"), "github.com/somerandomusernam2/AEmulator-Plus") { open(Links.PLUS) }
                     Row_(Icons.Rounded.History, stringResource(R.string.as_upstream_row, "AEmulator Sunset"), "github.com/drel4/AEmulator-Sunset") { open(Links.SUNSET) }
                     Row_(Icons.Rounded.History, stringResource(R.string.as_original_row, "AEmulator"), "github.com/uxazu/AEmulator") { open(Links.UPSTREAM) }
                     Row_(Icons.Rounded.Code, stringResource(R.string.as_license_notices), "GPL-3.0") { legalDialog = true }
@@ -375,6 +381,58 @@ private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
         onInstall = { file -> AppUpdateManager.installApk(ctx, file) },
         onOpenUrl = { url -> open(url) }
     )
+}
+
+/** Added for QuDroid: lock parts of the phone while a machine is on screen (needs the Shizuku app). */
+@Composable
+private fun ShizukuSettings() {
+    val ctx = LocalContext.current
+    var opts by remember { mutableStateOf(app.aemu.core.ShizukuLockStore.read(ctx)) }
+    var running by remember { mutableStateOf(false) }
+    var granted by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                running = app.aemu.core.ShizukuAccess.running()
+                granted = app.aemu.core.ShizukuAccess.granted()
+            }
+            kotlinx.coroutines.delay(1000)
+        }
+    }
+    fun save(o: app.aemu.core.ShizukuOptions) {
+        opts = o
+        runCatching { app.aemu.core.ShizukuLockStore.write(ctx, o) }
+        if (!o.any) Thread { app.aemu.core.SystemUiLock.releaseNow(ctx) }.start()
+    }
+    fun openShizuku() {
+        val launch = ctx.packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")
+        runCatching {
+            ctx.startActivity(launch ?: Intent(Intent.ACTION_VIEW, Uri.parse("https://shizuku.rikka.app/download/")))
+        }
+    }
+    val status = when {
+        !running -> "Shizuku is not running"
+        !granted -> "Shizuku is running, permission needed"
+        else -> "Shizuku is ready"
+    }
+    Section("Shizuku", "Lock parts of the phone while a machine is on screen") {
+        Toggle("Use Shizuku", status, opts.enabled) { on ->
+            save(opts.copy(enabled = on))
+            if (on && running && !granted) app.aemu.core.ShizukuAccess.request()
+        }
+        if (opts.enabled) {
+            if (!running) Row_(Icons.Rounded.Lock, "Start Shizuku", "Shizuku must be running. Tap to open it.") { openShizuku() }
+            else if (!granted) Row_(Icons.Rounded.Lock, "Allow QuDroid", "Tap to give QuDroid permission in Shizuku") { app.aemu.core.ShizukuAccess.request() }
+            Toggle("Disable notifications", "No alerts, pop-ups or notification icons in a machine", opts.notifications) { save(opts.copy(notifications = it)) }
+            Toggle("Disable quick settings", "The quick settings panel cannot be pulled down in a machine", opts.quickSettings) { save(opts.copy(quickSettings = it)) }
+            Toggle("Disable home", "The phone's Home does nothing in a machine; use the machine's own Home", opts.home) { save(opts.copy(home = it)) }
+            Toggle("Disable back", "The phone's Back does nothing in a machine; use the machine's own Back", opts.back) { save(opts.copy(back = it)) }
+            Row_(Icons.Rounded.Lock, "Leaving a machine", "Use the menu button at the top of the machine: Minimize or Shutdown") { }
+            Row_(Icons.Rounded.Lock, "Unlock the phone now", "Tap if notifications, quick settings, Home or Back stay disabled") {
+                Thread { app.aemu.core.SystemUiLock.releaseNow(ctx) }.start()
+            }
+        }
+    }
 }
 
 @Composable

@@ -36,6 +36,8 @@ import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Inventory2
 import androidx.compose.material.icons.rounded.List
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.DropdownMenu
@@ -191,22 +193,54 @@ fun MachineCard(
     }
 }
 
-/** Compact add menu in the top app bar. */
+/** The library's menu button: floats at the bottom of the screen; it opens [HomeMenuSheet]. */
 @Composable
-fun HomeFab(expanded: Boolean, onToggle: (Boolean) -> Unit, onImport: () -> Unit, onCatalog: () -> Unit, onLibrary: () -> Unit, onNewFolder: () -> Unit) {
-    Box {
-        IconButton(onClick = { onToggle(!expanded) }) {
-            Icon(if (expanded) Icons.Rounded.Close else Icons.Rounded.Add, stringResource(R.string.add_firmware))
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { onToggle(false) }) {
-            DropdownMenuItem(text = { Text(stringResource(R.string.add_import)) }, leadingIcon = { Icon(Icons.Rounded.FileOpen, null) },
-                onClick = { onToggle(false); onImport() })
-            DropdownMenuItem(text = { Text(stringResource(R.string.catalog_title)) }, leadingIcon = { Icon(Icons.Rounded.List, null) },
-                onClick = { onToggle(false); onCatalog() })
-            DropdownMenuItem(text = { Text(stringResource(R.string.lib_title)) }, leadingIcon = { Icon(Icons.Rounded.Inventory2, null) },
-                onClick = { onToggle(false); onLibrary() })
-            DropdownMenuItem(text = { Text(stringResource(R.string.folder_new)) }, leadingIcon = { Icon(Icons.Rounded.CreateNewFolder, null) },
-                onClick = { onToggle(false); onNewFolder() })
+fun HomeMenuButton(onClick: () -> Unit) {
+    FloatingActionButton(
+        onClick = onClick,
+        shape = CircleShape,
+        containerColor = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+    ) {
+        Icon(Icons.Rounded.MoreVert, stringResource(R.string.menu))
+    }
+}
+
+/**
+ * The library's menu, in the style of the machine menu: a bottom sheet with "Add" (import, catalog, library, new folder)
+ * and a button to the app's Settings. In the classic list [onAdd] opens its own add sheet instead.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun HomeMenuSheet(
+    newHome: Boolean,
+    onDismiss: () -> Unit,
+    onImport: () -> Unit,
+    onCatalog: () -> Unit,
+    onLibrary: () -> Unit,
+    onNewFolder: () -> Unit,
+    onAdd: () -> Unit,
+    onSettings: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
+            Text(stringResource(R.string.add_firmware), style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+            if (newHome) {
+                DropdownMenuItem(text = { Text(stringResource(R.string.add_import)) }, leadingIcon = { Icon(Icons.Rounded.FileOpen, null) }, onClick = onImport)
+                DropdownMenuItem(text = { Text(stringResource(R.string.catalog_title)) }, leadingIcon = { Icon(Icons.Rounded.List, null) }, onClick = onCatalog)
+                DropdownMenuItem(text = { Text(stringResource(R.string.lib_title)) }, leadingIcon = { Icon(Icons.Rounded.Inventory2, null) }, onClick = onLibrary)
+                DropdownMenuItem(text = { Text(stringResource(R.string.folder_new)) }, leadingIcon = { Icon(Icons.Rounded.CreateNewFolder, null) }, onClick = onNewFolder)
+            } else {
+                DropdownMenuItem(text = { Text(stringResource(R.string.add_firmware)) }, leadingIcon = { Icon(Icons.Rounded.Add, null) }, onClick = onAdd)
+            }
+            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            DropdownMenuItem(text = { Text(stringResource(R.string.settings)) }, leadingIcon = { Icon(Icons.Rounded.Settings, null) }, onClick = onSettings)
         }
     }
 }
