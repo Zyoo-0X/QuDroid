@@ -218,6 +218,7 @@ private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
         "updates" -> stringResource(R.string.as_updates)
         "appearance" -> stringResource(R.string.as_appearance)
         "defaults" -> stringResource(R.string.as_defaults)
+        "catalog" -> stringResource(R.string.catalog_title)
         "shizuku" -> "Shizuku"
         "links" -> stringResource(R.string.as_links)
         else -> stringResource(R.string.settings)
@@ -253,9 +254,7 @@ private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
                 if (p == null) {
                     item(key = "hero") { StaggerIn(0, seen) { SettingsHero() } }
                     item(key = "hub_catalog") { StaggerIn(1, seen) {
-                        SettingsHubTile(Icons.Rounded.List, stringResource(R.string.catalog_title), stringResource(R.string.catalog_open)) {
-                            ctx.startActivity(Intent(ctx, RomCatalogActivity::class.java))
-                        }
+                        SettingsHubTile(Icons.Rounded.List, stringResource(R.string.catalog_title), stringResource(R.string.catalog_open)) { page = "catalog" }
                     } }
                     item(key = "hub_updates") { StaggerIn(2, seen) {
                         SettingsHubTile(Icons.Rounded.SystemUpdate, stringResource(R.string.as_updates), "v${BuildConfig.VERSION_NAME}") { page = "updates" }
@@ -356,16 +355,33 @@ private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
                     }
                 }
                     } }
+                    "catalog" -> item(key = "catalog") { StaggerIn(0, seen) {
+                Section(stringResource(R.string.catalog_title)) {
+                    Row_(Icons.Rounded.List, stringResource(R.string.catalog_open), stringResource(R.string.catalog_reported)) {
+                        val anim = android.app.ActivityOptions.makeCustomAnimation(ctx, R.anim.page_in, R.anim.page_out)
+                        ctx.startActivity(Intent(ctx, RomCatalogActivity::class.java), anim.toBundle())
+                    }
+                }
+                    } }
                     "defaults" -> item(key = "defaults") { StaggerIn(0, seen) {
                 Section(stringResource(R.string.as_defaults), stringResource(R.string.as_defaults_sub)) {
                     fun set(s: app.aemu.core.VmSettings) { defaults = s; AppPrefs.setDefaults(ctx, s) }
                     InfoToggle(stringResource(R.string.vs_gpu), stringResource(R.string.vs_gpu_sub), defaults.gpu) { set(defaults.copy(gpu = it)) }
+                    InfoToggle(stringResource(R.string.vs_hwui), stringResource(R.string.vs_hwui_sub), defaults.hwui) { set(defaults.copy(hwui = it)) }
                     InfoToggle(stringResource(R.string.vs_jit), stringResource(R.string.vs_jit_sub), defaults.jit) { set(defaults.copy(jit = it)) }
+                    InfoToggle(stringResource(R.string.vs_fulldex), stringResource(R.string.vs_fulldex_sub), defaults.fullDexopt) { set(defaults.copy(fullDexopt = it)) }
+                    InfoToggle(stringResource(R.string.vs_lowram), stringResource(R.string.vs_lowram_sub), defaults.lowRam) { set(defaults.copy(lowRam = it)) }
                     InfoToggle(stringResource(R.string.vs_proxy), stringResource(R.string.vs_proxy_sub), defaults.netProxy) { set(defaults.copy(netProxy = it)) }
                     InfoToggle(stringResource(R.string.vs_nav), stringResource(R.string.vs_nav_sub), defaults.showNavBar) { set(defaults.copy(showNavBar = it)) }
                     NavigationSettings(defaults, set = ::set)
                     InfoToggle(stringResource(R.string.vs_awake), stringResource(R.string.vs_awake_sub), defaults.keepScreenOn) { set(defaults.copy(keepScreenOn = it)) }
                     InfoToggle(stringResource(R.string.as_led), stringResource(R.string.as_led_sub), defaults.showLed) { set(defaults.copy(showLed = it)) }
+                    InfoToggle(stringResource(R.string.vs_hide_menu), stringResource(R.string.vs_hide_menu_sub), defaults.hideMenuButton) { set(defaults.copy(hideMenuButton = it)) }
+                    InfoToggle(stringResource(R.string.vs_real_phone), stringResource(R.string.vs_real_phone_sub), defaults.realPhone) { set(defaults.copy(realPhone = it)) }
+                    InfoToggle(stringResource(R.string.vs_vibration), stringResource(R.string.vs_vibration_sub), defaults.vibration) { set(defaults.copy(vibration = it)) }
+                    InfoToggle(stringResource(R.string.vs_host_battery), stringResource(R.string.vs_host_battery_sub), defaults.hostBattery) { set(defaults.copy(hostBattery = it)) }
+                    InfoToggle(stringResource(R.string.vs_skip_setup), stringResource(R.string.vs_skip_setup_sub), defaults.skipSetupWizard) { set(defaults.copy(skipSetupWizard = it)) }
+                    InfoToggle(stringResource(R.string.vs_disable_google), stringResource(R.string.vs_disable_google_sub), defaults.disableGoogleApps) { set(defaults.copy(disableGoogleApps = it)) }
                     InfoToggle(stringResource(R.string.vs_match_phone), stringResource(R.string.vs_match_phone_sub), defaults.hostResolution) { set(defaults.copy(hostResolution = it)) }
                     if (!defaults.hostResolution) Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
@@ -456,10 +472,12 @@ private fun ShizukuSettings() {
     val ctx = LocalContext.current
     var opts by remember { mutableStateOf(app.aemu.core.ShizukuLockStore.read(ctx)) }
     var zState by remember { mutableStateOf(app.aemu.core.ShizukuAccess.State.NOT_RUNNING) }
+    var lastLock by remember { mutableStateOf("") }
     androidx.compose.runtime.LaunchedEffect(Unit) {
         while (true) {
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 zState = app.aemu.core.ShizukuAccess.state(ctx)
+                lastLock = app.aemu.core.SystemUiLock.lastResult(ctx)
             }
             kotlinx.coroutines.delay(1000)
         }
@@ -508,6 +526,7 @@ private fun ShizukuSettings() {
             InfoToggle("Disable volume", "The phone's volume keys do nothing to the phone's volume: they work the machine's volume", opts.disableVolume) { save(opts.copy(disableVolume = it)) }
             InfoToggle("Disable power", "Long-press Power opens the machine's power menu, not the phone's. A short press still turns the screen off (the machine sleeps with it and shows its lock screen on wake). Needs Android 11 or newer.", opts.disablePower) { save(opts.copy(disablePower = it)) }
             Row_(Icons.Rounded.Lock, "Leaving a machine", "Use the menu button at the top of the machine: Minimize or Shutdown") { }
+            Row_(Icons.Rounded.Lock, "Last lock result", lastLock.ifBlank { "Nothing yet. Open a machine, then come back here." }) { }
             Row_(Icons.Rounded.Lock, "Unlock the phone now", "Tap if notifications, quick settings, Home, Back or the Power long-press stay disabled") {
                 Thread { app.aemu.core.SystemUiLock.releaseNow(ctx) }.start()
             }

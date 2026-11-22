@@ -45,6 +45,12 @@ class RomCatalogActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent { AemuTheme { CatalogScreen(::finish) } }
     }
+
+    override fun finish() {
+        super.finish()
+        @Suppress("DEPRECATION")
+        overridePendingTransition(app.aemu.R.anim.page_back_in, app.aemu.R.anim.page_back_out)
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
