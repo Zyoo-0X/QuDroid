@@ -18,6 +18,7 @@ import android.os.Build
 import android.provider.Settings
 import androidx.core.content.FileProvider
 import app.aemu.BuildConfig
+import app.aemu.ui.UpdateVersion
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
@@ -59,7 +60,8 @@ sealed interface UpdateState {
 /** Modified for AEmulator Sunset on 2026-09-30: use the fork's releases.
  * Modified for AEmulator Plus on 2026-10-04: use the Plus releases. GPL-3.0; see NOTICE.md. */
 object AppUpdateManager {
-    private const val RELEASES_API = "https://api.github.com/repos/Zyoo-0X/QuDroid/releases"
+    // 100 per page (the default is 30) and never a cached answer: a release made a minute ago must be seen
+    private const val RELEASES_API = "https://api.github.com/repos/Zyoo-0X/QuDroid/releases?per_page=100"
     private const val GITHUB_REPO_URL = "https://github.com/Zyoo-0X/QuDroid"
 
     /**
@@ -73,6 +75,8 @@ object AppUpdateManager {
             conn.readTimeout = 15000
             conn.setRequestProperty("Accept", "application/vnd.github+json")
             conn.setRequestProperty("User-Agent", "QuDroid-App")
+            conn.setRequestProperty("Cache-Control", "no-cache")
+            conn.useCaches = false
 
             if (conn.responseCode != HttpURLConnection.HTTP_OK) {
                 throw Exception("HTTP ${conn.responseCode}: ${conn.responseMessage}")
@@ -82,6 +86,10 @@ object AppUpdateManager {
             val array = JSONArray(text)
             if (array.length() == 0) return@runCatching null
 
+            // The list of GitHub is ordered by when a release was CREATED, not by its version: a re-published or
+            // edited older release (beta.9) can stand above a newer one (beta.10). So all of them are looked at and
+            // the highest version wins (when versions are equal, the one that stands higher in the list).
+            var best: ReleaseInfo? = null
             for (i in 0 until array.length()) {
                 val rel = array.getJSONObject(i)
                 if (rel.optBoolean("draft", false)) continue
@@ -103,7 +111,7 @@ object AppUpdateManager {
                             else -> 1
                         }
                     }.firstOrNull() ?: continue
-                return@runCatching ReleaseInfo(
+                val found = ReleaseInfo(
                     versionName = versionName,
                     tagName = tagName,
                     title = title,
@@ -112,8 +120,10 @@ object AppUpdateManager {
                     fileName = asset.optString("name", ""),
                     sizeBytes = asset.optLong("size", 0L)
                 )
+                val cur = best
+                if (cur == null || UpdateVersion.compare(found.versionName, cur.versionName) > 0) best = found
             }
-            null
+            best
         }
     }
 
@@ -121,27 +131,8 @@ object AppUpdateManager {
      * Сравнение версий (семантическое сравнение сегментов чисел).
      * Возвращает true, если latestTag новее чем currentVersion.
      */
-    fun isNewerVersion(latestTag: String, currentVersion: String): Boolean {
-        val cleanLatest = latestTag.trim().removePrefix("v").removePrefix("V")
-        val cleanCurrent = currentVersion.trim().removePrefix("v").removePrefix("V")
-
-        if (cleanLatest.equals(cleanCurrent, ignoreCase = true)) return false
-
-        // the first dotted number in the tag ("v1.2.3", "build-12", "1.2.3-beta")
-        val num = Regex("""\d+(?:\.\d+)*""")
-        val latestParts = (num.find(cleanLatest)?.value ?: return false).split('.').map { it.toIntOrNull() ?: 0 }
-        val currentParts = (num.find(cleanCurrent)?.value ?: return true).split('.').map { it.toIntOrNull() ?: 0 }
-
-        val maxLen = maxOf(latestParts.size, currentParts.size)
-        for (i in 0 until maxLen) {
-            val l = latestParts.getOrElse(i) { 0 }
-            val c = currentParts.getOrElse(i) { 0 }
-            if (l > c) return true
-            if (l < c) return false
-        }
-
-        return false
-    }
+    fun isNewerVersion(latestTag: String, currentVersion: String): Boolean =
+        UpdateVersion.isNewer(latestTag, currentVersion)
 
     /**
      * Скачивание APK с поддержкой редиректов (GitHub перенаправляет на AWS S3) и отслеживанием прогресса.
