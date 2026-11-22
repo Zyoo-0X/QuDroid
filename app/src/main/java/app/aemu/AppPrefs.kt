@@ -202,6 +202,15 @@ object AppPrefs {
             keypad = p.getBoolean("def_keypad", false),
             keepScreenOn = p.getBoolean("def_awake", d.keepScreenOn),
             showLed = p.getBoolean("def_led", d.showLed),
+            hwui = p.getBoolean("def_hwui", d.hwui),
+            fullDexopt = p.getBoolean("def_fulldex", d.fullDexopt),
+            lowRam = p.getBoolean("def_lowram", d.lowRam),
+            vibration = p.getBoolean("def_vibration", d.vibration),
+            hostBattery = p.getBoolean("def_host_battery", d.hostBattery),
+            skipSetupWizard = p.getBoolean("def_skip_setup", d.skipSetupWizard),
+            disableGoogleApps = p.getBoolean("def_disable_google", d.disableGoogleApps),
+            realPhone = p.getBoolean("def_real_phone", d.realPhone),
+            hideMenuButton = p.getBoolean("def_hide_menu", d.hideMenuButton),
             // new systems follow the phone's own screen size and DPI unless the user chose fixed values
             hostResolution = p.getBoolean("def_host_res", true),
             width = p.getInt("def_width", d.width).coerceAtLeast(2) and 0x7ffffffe,
@@ -217,7 +226,11 @@ object AppPrefs {
         .putBoolean("def_trackball_dpad", s.trackballDpad).putInt("def_trackball_step", s.trackballStepDp)
         .putBoolean("def_mouse_keyboard", s.mouseKeyboard).putBoolean("def_keypad", s.keypad)
         .putBoolean("def_host_res", s.hostResolution).putInt("def_width", s.width).putInt("def_height", s.height)
-        .putInt("def_density", s.density).apply()
+        .putInt("def_density", s.density)
+        .putBoolean("def_hwui", s.hwui).putBoolean("def_fulldex", s.fullDexopt).putBoolean("def_lowram", s.lowRam)
+        .putBoolean("def_vibration", s.vibration).putBoolean("def_host_battery", s.hostBattery)
+        .putBoolean("def_skip_setup", s.skipSetupWizard).putBoolean("def_disable_google", s.disableGoogleApps)
+        .putBoolean("def_real_phone", s.realPhone).putBoolean("def_hide_menu", s.hideMenuButton).apply()
 
     /** Контекст с выбранным языком — для attachBaseContext каждой активности. */
     /**
