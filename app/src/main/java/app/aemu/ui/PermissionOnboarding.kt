@@ -262,10 +262,14 @@ fun PermissionOnboardingScreen(onFinish: () -> Unit) {
         when (item.id) {
             "files" -> if (Build.VERSION.SDK_INT >= 30) openAllFilesAccess(ctx) else launcher.launch(item.req(ctx).toTypedArray())
             "shizuku" -> {
-                if (!shizukuRunning) {
-                    val launch = ctx.packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")
-                    runCatching { ctx.startActivity(launch ?: Intent(Intent.ACTION_VIEW, Uri.parse("https://shizuku.rikka.app/download/"))) }
-                } else app.aemu.core.ShizukuAccess.request()
+                if (!shizukuRunning) app.aemu.core.ShizukuAccess.openManager(ctx)
+                else when (app.aemu.core.ShizukuAccess.request()) {
+                    app.aemu.core.ShizukuAccess.Ask.OPEN_SHIZUKU, app.aemu.core.ShizukuAccess.Ask.TOO_OLD -> {
+                        android.widget.Toast.makeText(ctx, "In Shizuku, open Authorized apps and allow QuDroid", android.widget.Toast.LENGTH_LONG).show()
+                        app.aemu.core.ShizukuAccess.openManager(ctx)
+                    }
+                    else -> {}
+                }
             }
             else -> {
                 val todo = item.req(ctx).filter { !has(ctx, it) }

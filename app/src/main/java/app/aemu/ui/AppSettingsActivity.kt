@@ -198,7 +198,7 @@ private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
                     updateState = UpdateState.Downloading(rel, progress, downloaded, total)
                 }
                 updateState = UpdateState.ReadyToInstall(rel, file)
-                AppUpdateManager.installApk(ctx, file)
+                if (!AppUpdateManager.installApk(ctx, file)) AppUpdateManager.lastError?.let { updateState = UpdateState.Error(it) }
             } catch (e: Exception) {
                 if (e !is kotlinx.coroutines.CancellationException) {
                     updateState = UpdateState.Error(e.userMessageOrNull(ctx) ?: ctx.getString(R.string.update_download_failed_generic))
@@ -445,7 +445,7 @@ private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
             downloadJob?.cancel()
             updateState = UpdateState.Idle
         },
-        onInstall = { file -> AppUpdateManager.installApk(ctx, file) },
+        onInstall = { file -> if (!AppUpdateManager.installApk(ctx, file)) AppUpdateManager.lastError?.let { updateState = UpdateState.Error(it) } },
         onOpenUrl = { url -> open(url) }
     )
 }
@@ -455,13 +455,11 @@ private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
 private fun ShizukuSettings() {
     val ctx = LocalContext.current
     var opts by remember { mutableStateOf(app.aemu.core.ShizukuLockStore.read(ctx)) }
-    var running by remember { mutableStateOf(false) }
-    var granted by remember { mutableStateOf(false) }
+    var zState by remember { mutableStateOf(app.aemu.core.ShizukuAccess.State.NOT_RUNNING) }
     androidx.compose.runtime.LaunchedEffect(Unit) {
         while (true) {
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                running = app.aemu.core.ShizukuAccess.running()
-                granted = app.aemu.core.ShizukuAccess.granted()
+                zState = app.aemu.core.ShizukuAccess.state(ctx)
             }
             kotlinx.coroutines.delay(1000)
         }
@@ -472,25 +470,37 @@ private fun ShizukuSettings() {
         // a machine is not on screen while this page is: give everything back, the next machine window locks again
         Thread { app.aemu.core.SystemUiLock.releaseNow(ctx) }.start()
     }
-    fun openShizuku() {
-        val launch = ctx.packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")
-        runCatching {
-            ctx.startActivity(launch ?: Intent(Intent.ACTION_VIEW, Uri.parse("https://shizuku.rikka.app/download/")))
+    // asks for the permission; when the system dialog cannot show (denied for good) the Shizuku app is opened instead
+    fun allow() {
+        when (app.aemu.core.ShizukuAccess.request()) {
+            app.aemu.core.ShizukuAccess.Ask.OPEN_SHIZUKU -> {
+                android.widget.Toast.makeText(ctx, "In Shizuku, open Authorized apps and allow QuDroid", android.widget.Toast.LENGTH_LONG).show()
+                app.aemu.core.ShizukuAccess.openManager(ctx)
+            }
+            app.aemu.core.ShizukuAccess.Ask.TOO_OLD -> app.aemu.core.ShizukuAccess.openManager(ctx)
+            else -> {}
         }
     }
-    val status = when {
-        !running -> "Shizuku is not running"
-        !granted -> "Shizuku is running, permission needed"
-        else -> "Shizuku is ready"
-    }
+    val status = app.aemu.core.ShizukuAccess.describe(zState)
     Section("Shizuku", "Lock parts of the phone while a machine is on screen") {
         InfoToggle("Use Shizuku", status, opts.enabled) { on ->
             save(if (on) opts.copy(enabled = true, notifications = true, quickSettings = true, home = true, back = true, disableVolume = true, disablePower = true) else opts.copy(enabled = false, notifications = false, quickSettings = false, home = false, back = false, disableVolume = false, disablePower = false))
-            if (on && running && !granted) app.aemu.core.ShizukuAccess.request()
+            if (on && zState == app.aemu.core.ShizukuAccess.State.NEEDS_PERMISSION) allow()
         }
         if (opts.enabled) {
-            if (!running) Row_(Icons.Rounded.Lock, "Start Shizuku", "Shizuku must be running. Tap to open it.") { openShizuku() }
-            else if (!granted) Row_(Icons.Rounded.Lock, "Allow QuDroid", "Tap to give QuDroid permission in Shizuku") { app.aemu.core.ShizukuAccess.request() }
+            when (zState) {
+                app.aemu.core.ShizukuAccess.State.NOT_INSTALLED ->
+                    Row_(Icons.Rounded.Lock, "Get Shizuku", "Shizuku is not installed. Tap to open its download page.") { app.aemu.core.ShizukuAccess.openManager(ctx) }
+                app.aemu.core.ShizukuAccess.State.NOT_RUNNING ->
+                    Row_(Icons.Rounded.Lock, "Start Shizuku", "Shizuku must be running. Tap to open it.") { app.aemu.core.ShizukuAccess.openManager(ctx) }
+                app.aemu.core.ShizukuAccess.State.TOO_OLD ->
+                    Row_(Icons.Rounded.Lock, "Update Shizuku", "This Shizuku is too old (needs v11 or newer). Tap to open it.") { app.aemu.core.ShizukuAccess.openManager(ctx) }
+                app.aemu.core.ShizukuAccess.State.NEEDS_PERMISSION ->
+                    Row_(Icons.Rounded.Lock, "Allow QuDroid", "Tap to give QuDroid permission in Shizuku") { allow() }
+                app.aemu.core.ShizukuAccess.State.DENIED_FOR_GOOD ->
+                    Row_(Icons.Rounded.Lock, "Allow QuDroid in Shizuku", "QuDroid was denied. In Shizuku open Authorized apps and switch QuDroid on. Tap to open Shizuku.") { allow() }
+                app.aemu.core.ShizukuAccess.State.READY -> {}
+            }
             InfoToggle("Disable notifications", "No alerts, pop-ups or notification icons in a machine", opts.notifications) { save(opts.copy(notifications = it)) }
             InfoToggle("Disable quick settings", "The quick settings panel cannot be pulled down in a machine", opts.quickSettings) { save(opts.copy(quickSettings = it)) }
             InfoToggle("Disable home", "The phone's Home does nothing in a machine; use the machine's own Home", opts.home) { save(opts.copy(home = it)) }

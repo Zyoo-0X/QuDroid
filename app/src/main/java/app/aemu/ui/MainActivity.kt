@@ -300,7 +300,7 @@ fun Library(model: LibraryModel) {
                     updateState = UpdateState.Downloading(rel, progress, downloaded, total)
                 }
                 updateState = UpdateState.ReadyToInstall(rel, file)
-                AppUpdateManager.installApk(ctx, file)
+                if (!AppUpdateManager.installApk(ctx, file)) AppUpdateManager.lastError?.let { updateState = UpdateState.Error(it) }
             } catch (e: Exception) {
                 if (e !is kotlinx.coroutines.CancellationException) {
                     updateState = UpdateState.Error(e.userMessageOrNull(ctx) ?: ctx.getString(R.string.update_download_failed_generic))
@@ -569,7 +569,7 @@ fun Library(model: LibraryModel) {
             downloadJob?.cancel()
             updateState = UpdateState.Idle
         },
-        onInstall = { file -> AppUpdateManager.installApk(ctx, file) },
+        onInstall = { file -> if (!AppUpdateManager.installApk(ctx, file)) AppUpdateManager.lastError?.let { updateState = UpdateState.Error(it) } },
         onOpenUrl = { url -> runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))) } }
     )
 }

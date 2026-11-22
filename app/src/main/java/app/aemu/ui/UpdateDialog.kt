@@ -305,7 +305,7 @@ fun UpdateDialog(
                 },
                 text = {
                     Text(
-                        text = stringResource(R.string.update_error, state.message),
+                        text = state.message,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
