@@ -217,6 +217,28 @@ object ShizukuAccess {
 object SystemUiLock {
     private val main = Handler(Looper.getMainLooper())
 
+    const val ACTION_APPLY = "app.aemu.core.LOCK_APPLY"
+    const val ACTION_RELEASE_IDLE = "app.aemu.core.LOCK_RELEASE_IDLE"
+
+    /** where the notes go besides the file and the system log: the machine's own log (set by the machine window) */
+    @Volatile var sink: ((String) -> Unit)? = null
+
+    /**
+     * A machine runs in a process of its own, and getting the Shizuku binder there can fail. The app's MAIN process
+     * (it holds the Shizuku provider) always has it, so a machine process that has none asks the main one to do it.
+     */
+    private fun delegate(app: Context, action: String): Boolean = runCatching {
+        app.sendBroadcast(android.content.Intent(action)
+            .setComponent(android.content.ComponentName(app, ShizukuLockReceiver::class.java)))
+        true
+    }.getOrDefault(false)
+
+    /** Called by [ShizukuLockReceiver] in the main process. */
+    internal fun applyFromRemote(app: Context) {
+        val o = ShizukuLockStore.read(app)
+        if (o.any) applyLock(app, o, 8000)
+    }
+
     private fun holderDir(ctx: Context) = File(ctx.filesDir, "ui-lock").apply { mkdirs() }
     private fun holderFile(ctx: Context, owner: Any) = File(holderDir(ctx), "${AndroidProcess.myPid()}-${System.identityHashCode(owner)}")
     private fun marker(ctx: Context) = File(ctx.filesDir, "ui-lock-applied")
@@ -254,7 +276,10 @@ object SystemUiLock {
         if (!marker(app).exists()) return
         if (liveHolders(app) > 0) return
         // wait for Shizuku BEFORE taking the lock, then look again: a machine window may have come on screen meanwhile
-        if (!ShizukuAccess.awaitReady(2000)) return
+        if (!ShizukuAccess.awaitReady(2000)) {
+            if (!ShizukuAccess.isMainProcess()) delegate(app, ACTION_RELEASE_IDLE)
+            return
+        }
         synchronized(this) {
             if (liveHolders(app) > 0) return
             releaseLocked(app)
@@ -269,6 +294,8 @@ object SystemUiLock {
     }
 
     private fun releaseLocked(app: Context) {
+        restoreStatusBar(app)
+        restoreBackGesture(app)
         var (code, _) = ShizukuAccess.exec("cmd", "statusbar", "send-disable-flag", "none")
         if (code != 0) { // once more: the status bar service may be busy
             try { Thread.sleep(300) } catch (_: InterruptedException) { }
@@ -281,6 +308,83 @@ object SystemUiLock {
         if (code == 0) runCatching { marker(app).delete() }
     }
 
+    // ---- the status bar, the way CleanBar does it -------------------------------------------------------------
+    private const val ICON_SLOTS = "battery,clock,time,wifi,mobile,phone_signal,data_connection,vpn,airplane,hotspot,alarm_clock," +
+        "volume,headset,wireless_headset,bluetooth_handsfree_battery,bluetooth,location,gps,zen,cast,nfc,micphone,call_record," +
+        "privacy_mode,sync_failing,sync_active,camera,mute,managed_profile"
+    private val STATUS_KEYS = listOf("secure" to "icon_blacklist", "system" to "icon_blacklist",
+        "global" to "icon_blacklist", "global" to "policy_control")
+
+    private fun sh(cmd: String) = ShizukuAccess.exec("sh", "-c", cmd)
+    private fun statusBackup(app: Context) = File(app.filesDir, "ui-lock-statusbar.json")
+
+    /** Step 1: what the person had is kept once (restored on unlock), and the demo mode of the status bar is left. */
+    private fun prepareStatusBar(app: Context) {
+        val f = statusBackup(app)
+        if (!f.exists()) {
+            val j = JSONObject()
+            for ((table, key) in STATUS_KEYS) {
+                val r = sh("settings get $table $key")
+                j.put("$table.$key", if (r.first == 0) r.second.trim() else "null")
+            }
+            runCatching { f.writeText(j.toString()) }
+        }
+        sh("am broadcast -a com.android.systemui.demo -e command exit")
+    }
+
+    /** Step 3, after the flags: icon blacklists and the immersive policy (older Androids). */
+    private fun hideStatusBarSettings() {
+        sh("settings put global policy_control immersive.status=*")
+        for (table in listOf("secure", "system", "global")) sh("settings put $table icon_blacklist \"$ICON_SLOTS\"")
+    }
+
+    /** Puts back what [prepareStatusBar] kept; a value that was not set is deleted again. */
+    private fun restoreStatusBar(app: Context) {
+        val f = statusBackup(app)
+        if (!f.exists()) return
+        val j = runCatching { JSONObject(f.readText()) }.getOrNull()
+        sh("am broadcast -a com.android.systemui.demo -e command exit")
+        for ((table, key) in STATUS_KEYS) {
+            val old = j?.optString("$table.$key", "null")?.trim().orEmpty()
+            if (old.isEmpty() || old == "null") {
+                sh("settings put $table $key \"\"") // empty first: the observers of the system notice the change
+                sh("settings delete $table $key")
+            } else sh("settings put $table $key \"" + old.replace("\"", "\\\"") + "\"")
+        }
+        runCatching { f.delete() }
+    }
+
+    // ---- the phone's back gesture: its inset scale goes to 0 while a machine is on screen ------------------------
+    private val BACK_KEYS = listOf("back_gesture_inset_scale_left", "back_gesture_inset_scale_right")
+    private fun backBackup(app: Context) = File(app.filesDir, "ui-lock-backgesture.json")
+
+    /** The values the person had are kept once (restored on unlock); then both side edges get scale 0: no back gesture. */
+    private fun disableBackGesture(app: Context) {
+        val f = backBackup(app)
+        if (!f.exists()) {
+            val j = JSONObject()
+            for (k in BACK_KEYS) {
+                val r = sh("settings get secure $k")
+                j.put(k, if (r.first == 0) r.second.trim() else "null")
+            }
+            runCatching { f.writeText(j.toString()) }
+        }
+        for (k in BACK_KEYS) sh("settings put secure $k 0")
+    }
+
+    /** Back to what it was. A value that was not set is deleted: that is the system's default again. */
+    private fun restoreBackGesture(app: Context) {
+        val f = backBackup(app)
+        if (!f.exists()) return
+        val j = runCatching { JSONObject(f.readText()) }.getOrNull()
+        for (k in BACK_KEYS) {
+            val old = j?.optString(k, "null")?.trim().orEmpty()
+            if (old.isEmpty() || old == "null") sh("settings delete secure $k")
+            else sh("settings put secure $k $old")
+        }
+        runCatching { f.delete() }
+    }
+
     /** The system's disable flags for what the person chose. Names the system does not know are ignored by it. */
     private fun flagsFor(o: ShizukuOptions): List<String> {
         val want = LinkedHashSet<String>()
@@ -291,9 +395,8 @@ object SystemUiLock {
         // Recents is locked with Home: otherwise the app switcher is a way out of the machine
         if (o.home) want += listOf("home", "recents")
         if (o.back) want += "back"
-        // the whole bar: icons, clock, alerts and every way to pull it down
-        if (o.statusBar) want += listOf("system-icons", "clock", "notification-icons", "notification-alerts", "notification-peek",
-            "statusbar-expansion", "quick-settings", "notification-shade")
+        // the status bar itself (CleanBar's way): icons, clock and notification icons; the rest is in [hideStatusBarSettings]
+        if (o.statusBar) want += listOf("system-icons", "clock", "notification-icons")
         return want.toList()
     }
 
@@ -312,6 +415,7 @@ object SystemUiLock {
     private fun note(app: Context, text: String) {
         android.util.Log.i("QuDroidLock", text)
         runCatching { lastFile(app).writeText(text) }
+        runCatching { sink?.invoke(text) }
     }
     /** What the last attempt to lock or unlock the phone's system UI said (empty: none yet). */
     fun lastResult(ctx: Context): String = runCatching { lastFile(ctx.applicationContext).readText() }.getOrDefault("")
@@ -341,17 +445,24 @@ object SystemUiLock {
     }
 
     @Synchronized
-    private fun applyLock(app: Context, o: ShizukuOptions) {
-        if (!ShizukuAccess.awaitReady()) {
-            note(app, "not locked: " + ShizukuAccess.describe(ShizukuAccess.state(app)))
+    private fun applyLock(app: Context, o: ShizukuOptions, wait: Long = 3000) {
+        if (!ShizukuAccess.awaitReady(wait)) {
+            if (!ShizukuAccess.isMainProcess() && delegate(app, ACTION_APPLY)) {
+                note(app, "no Shizuku in this process, the main process was asked to lock")
+            } else note(app, "not locked: " + ShizukuAccess.describe(ShizukuAccess.state(app)))
             return
         }
         val use = flagsFor(o)
         if (use.isEmpty() && !o.disablePower) return
         runCatching { marker(app).writeText("1") } // before the command: a lock without a marker could never be taken back
         if (o.disablePower) holdPowerLongPress(app)
+        if (o.back) disableBackGesture(app)
         if (use.isNotEmpty()) {
+            if (o.statusBar) prepareStatusBar(app)
+            // reset to "none" first: SystemUI then drops the flags it has cached (needed on OriginOS / Vivo / HyperOS)
+            sh("cmd statusbar send-disable-flag none")
             sendFlags(app, use)
+            if (o.statusBar) hideStatusBarSettings()
             startWatch(app, use)
         }
     }
