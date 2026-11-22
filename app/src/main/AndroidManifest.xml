@@ -261,6 +261,11 @@
             android:process=":gl3" />
 
         <!-- answer of the system installer for an in-app update (confirmation + the reason of a failure) -->
+        <!-- main process: does the Shizuku lock when a machine process has no Shizuku binder -->
+        <receiver
+            android:name=".core.ShizukuLockReceiver"
+            android:exported="false" />
+
         <receiver
             android:name=".update.InstallResultReceiver"
             android:exported="false" />
