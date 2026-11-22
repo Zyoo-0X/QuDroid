@@ -19,8 +19,14 @@ data class ShizukuOptions(
     val quickSettings: Boolean = false,
     val home: Boolean = false,
     val back: Boolean = false,
+    /** the phone's volume keys never touch the phone while a machine is on screen: they drive the machine's volume */
+    val disableVolume: Boolean = false,
+    /** long-press Power opens the machine's power menu, not the phone's (a short press still turns the screen off) */
+    val disablePower: Boolean = false,
 ) {
-    val any: Boolean get() = enabled && (notifications || quickSettings || home || back)
+    val any: Boolean get() = enabled && (notifications || quickSettings || home || back || disableVolume || disablePower)
+    val powerActive: Boolean get() = enabled && disablePower
+    val volumeActive: Boolean get() = enabled && disableVolume
 }
 
 /** The choices, in a file: every machine runs in a process of its own (same way as AppPrefs.hostUiOptions). */
@@ -30,7 +36,7 @@ object ShizukuLockStore {
     fun read(ctx: Context): ShizukuOptions = runCatching {
         val j = JSONObject(file(ctx).openRead().bufferedReader().use { it.readText() })
         ShizukuOptions(j.optBoolean("enabled"), j.optBoolean("notifications"), j.optBoolean("quickSettings"),
-            j.optBoolean("home"), j.optBoolean("back"))
+            j.optBoolean("home"), j.optBoolean("back"), j.optBoolean("disableVolume"), j.optBoolean("disablePower"))
     }.getOrDefault(ShizukuOptions())
 
     fun write(ctx: Context, o: ShizukuOptions) {
@@ -39,6 +45,7 @@ object ShizukuLockStore {
         try {
             s.write(JSONObject().put("enabled", o.enabled).put("notifications", o.notifications)
                 .put("quickSettings", o.quickSettings).put("home", o.home).put("back", o.back)
+                .put("disableVolume", o.disableVolume).put("disablePower", o.disablePower)
                 .toString().toByteArray(Charsets.UTF_8))
             f.finishWrite(s)
         } catch (e: Throwable) { f.failWrite(s); throw e }
@@ -77,6 +84,14 @@ object ShizukuAccess {
     } catch (t: Throwable) {
         -1 to (t.message ?: t.toString())
     }
+
+    /** Starts [cmd] as the shell user and returns the running process (for output that is read as it comes), or null. */
+    fun spawn(vararg cmd: String): Process? = try {
+        val m = Shizuku::class.java.getDeclaredMethod(
+            "newProcess", Array<String>::class.java, Array<String>::class.java, String::class.java)
+        m.isAccessible = true
+        m.invoke(null, arrayOf(*cmd), null, null) as Process
+    } catch (t: Throwable) { null }
 
     /**
      * Machines run in their own processes (":vm", ":vm1", ...), the Shizuku provider is in the main one: the machine
@@ -156,13 +171,15 @@ object SystemUiLock {
         val app = ctx.applicationContext
         if (!ShizukuAccess.awaitReady(2000)) return
         ShizukuAccess.exec("cmd", "statusbar", "send-disable-flag", "none")
+        restorePowerLongPress(app)
         runCatching { marker(app).delete() }
     }
 
     @Synchronized
     private fun applyLock(app: Context, o: ShizukuOptions) {
         if (!ShizukuAccess.awaitReady()) return
-        val sup = supported(app)
+        val wantFlags = o.notifications || o.quickSettings || o.home || o.back
+        val sup = if (wantFlags) supported(app) else emptySet()
         val want = LinkedHashSet<String>()
         if (o.notifications) want += listOf("notification-peek", "notification-alerts", "notification-icons")
         if (o.notifications && o.quickSettings) want += "notification-shade"
@@ -173,9 +190,37 @@ object SystemUiLock {
         // older systems have no separate flags: the whole pull-down goes
         val shade = (o.quickSettings && "quick-settings" !in sup) || (o.notifications && o.quickSettings && "notification-shade" !in sup)
         if (shade && "statusbar-expansion" in sup) use += "statusbar-expansion"
-        if (use.isEmpty()) return
+        if (use.isEmpty() && !o.disablePower) return
         runCatching { marker(app).writeText("1") } // before the command: a lock without a marker could never be taken back
-        ShizukuAccess.exec("cmd", "statusbar", "send-disable-flag", *use.toTypedArray())
+        if (o.disablePower) holdPowerLongPress(app)
+        if (use.isNotEmpty()) ShizukuAccess.exec("cmd", "statusbar", "send-disable-flag", *use.toTypedArray())
+    }
+
+    private const val POWER_LONG = "power_button_long_press"
+    private fun powerSaved(app: Context) = File(app.filesDir, "ui-lock-power-long")
+
+    /**
+     * The phone's own long-press of Power (its power menu) is set to "nothing" while a machine is on screen; the value
+     * it had is kept in a file and put back in [releaseNow]. The long press is then taken by [PowerKeyWatcher].
+     * The setting exists from Android 11; on older systems the phone's menu may still open.
+     */
+    private fun holdPowerLongPress(app: Context) {
+        val f = powerSaved(app)
+        if (!f.exists()) {
+            val (code, out) = ShizukuAccess.exec("settings", "get", "global", POWER_LONG)
+            if (code != 0) return
+            runCatching { f.writeText(out.trim().ifEmpty { "null" }) }
+        }
+        if (f.exists()) ShizukuAccess.exec("settings", "put", "global", POWER_LONG, "0")
+    }
+
+    private fun restorePowerLongPress(app: Context) {
+        val f = powerSaved(app)
+        if (!f.exists()) return
+        val v = runCatching { f.readText().trim() }.getOrDefault("null")
+        if (v.isEmpty() || v == "null") ShizukuAccess.exec("settings", "delete", "global", POWER_LONG)
+        else ShizukuAccess.exec("settings", "put", "global", POWER_LONG, v)
+        runCatching { f.delete() }
     }
 
     /** Which flag names this Android knows (an unknown name makes the command print an error); remembered per build. */
