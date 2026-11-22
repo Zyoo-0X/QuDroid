@@ -82,7 +82,11 @@ class LibraryModel(app: Application) : AndroidViewModel(app) {
                     showNavBar = d.showNavBar, navButtons = d.navButtons, trackball = d.trackball,
                     trackballDpad = d.trackballDpad, trackballStepDp = d.trackballStepDp,
                     mouseKeyboard = d.mouseKeyboard, keypad = d.keypad,
-                    keepScreenOn = d.keepScreenOn, showLed = d.showLed))
+                    keepScreenOn = d.keepScreenOn, showLed = d.showLed,
+                    hostResolution = d.hostResolution,
+                    width = if (d.hostResolution) raw.settings.width else d.width,
+                    height = if (d.hostResolution) raw.settings.height else d.height,
+                    density = if (d.hostResolution) raw.settings.density else d.density))
                 if (img != raw) ImageStore.save(ctx, img)
                 _import.value = _import.value.copy(active = false, done = img, step = lctx.getString(R.string.import_ready), progress = 1f)
                 if (deleteWhenDone) uris.forEach { u -> if (u.scheme == "file") u.path?.let { java.io.File(it).delete() } }

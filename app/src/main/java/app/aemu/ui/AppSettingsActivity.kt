@@ -366,6 +366,13 @@ private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
                     NavigationSettings(defaults, set = ::set)
                     InfoToggle(stringResource(R.string.vs_awake), stringResource(R.string.vs_awake_sub), defaults.keepScreenOn) { set(defaults.copy(keepScreenOn = it)) }
                     InfoToggle(stringResource(R.string.as_led), stringResource(R.string.as_led_sub), defaults.showLed) { set(defaults.copy(showLed = it)) }
+                    InfoToggle(stringResource(R.string.vs_match_phone), stringResource(R.string.vs_match_phone_sub), defaults.hostResolution) { set(defaults.copy(hostResolution = it)) }
+                    if (!defaults.hostResolution) Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+                        NumField(stringResource(R.string.vs_width), defaults.width, Modifier.weight(1f)) { set(defaults.copy(width = it.coerceAtLeast(2) and 0x7ffffffe)) }
+                        NumField(stringResource(R.string.vs_height), defaults.height, Modifier.weight(1f)) { set(defaults.copy(height = it.coerceAtLeast(2) and 0x7ffffffe)) }
+                        NumField(stringResource(R.string.vs_dpi), defaults.density, Modifier.weight(1f)) { set(defaults.copy(density = it.coerceIn(96, 640))) }
+                    }
                 }
                     } }
                     "shizuku" -> item(key = "shizuku") { StaggerIn(0, seen) {

@@ -132,6 +132,9 @@ fun SettingsSheet(img: GuestImage, onDismiss: () -> Unit, onSave: (VmSettings, S
                 fun followingHost(value: VmSettings) = value.copy(width = hostScreen.first and -2,
                     height = hostScreen.second and -2, density = hostScreen.third)
                 LaunchedEffect(img.id, s.hostResolution) { if (s.hostResolution) s = followingHost(s) }
+                Toggle(stringResource(R.string.vs_match_phone), stringResource(R.string.vs_match_phone_sub), s.hostResolution) {
+                    s = if (it) followingHost(s.copy(hostResolution = true)) else s.copy(hostResolution = false)
+                }
                 var presetMenu by remember { mutableStateOf(false) }
                 val current = RESOLUTIONS.firstOrNull { it.selected(s) }
                 val hostLabel = stringResource(R.string.vs_resolution_host)
@@ -353,6 +356,7 @@ fun SettingsSheet(img: GuestImage, onDismiss: () -> Unit, onSave: (VmSettings, S
             Toggle(stringResource(R.string.vs_hide_menu), stringResource(R.string.vs_hide_menu_sub), s.hideMenuButton) { s = s.copy(hideMenuButton = it) }
             NavigationSettings(s, app.aemu.core.LegacyFirmware.isPreRelease(img.release)) { s = it }
             Toggle(stringResource(R.string.vs_awake), stringResource(R.string.vs_awake_sub), s.keepScreenOn) { s = s.copy(keepScreenOn = it) }
+            Toggle(stringResource(R.string.vs_real_phone), stringResource(R.string.vs_real_phone_sub), s.realPhone) { s = s.copy(realPhone = it) }
             Toggle(stringResource(R.string.as_led), stringResource(R.string.as_led_sub), s.showLed) { s = s.copy(showLed = it) }
             Toggle(stringResource(R.string.vs_single), stringResource(R.string.vs_single_sub), s.mtMode == 4) { s = s.copy(mtMode = if (it) 4 else 0) }
 
@@ -548,7 +552,7 @@ private fun HardwarePicker(value: String, set: (String) -> Unit) {
 }
 
 @Composable
-private fun NumField(label: String, value: Int, modifier: Modifier, set: (Int) -> Unit) {
+internal fun NumField(label: String, value: Int, modifier: Modifier, set: (Int) -> Unit) {
     // The setter rounds/clamps (width and height are forced even, dpi is clamped), so the value that comes back
     // can differ from what was typed: 5 -> 4, 9 -> 8, or a lone "1" -> 2. While the field has focus the typed text
     // must stay as typed; it is only replaced by the stored value once focus leaves (or the value changes elsewhere,

@@ -369,6 +369,7 @@ open class VmActivity : ComponentActivity() {
         userFrac = loadScreenFrac(vm.img.id)
         showLed = s.showLed
         if (s.keepScreenOn) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if (s.realPhone) enableRealPhoneMode()
 
         val (gw, gh) = if (vm.engine == Engine.GB) 480 to 800 else s.width to s.height
         val root = FrameLayout(this).apply { setBackgroundColor(0xff000000.toInt()) }
@@ -598,6 +599,7 @@ open class VmActivity : ComponentActivity() {
         applyVmTheme()
         applyCutoutBarrier()
         orientationListener?.enable()
+        if (realPhone()) wakeGuestWithHost()
         if (::vm.isInitialized) { vm.cameraVisible(true); vm.micVisible(true); vm.motionVisible(true); if (vm.engine == Engine.N64) vm.sensors.resume(true) }
         // Shizuku: notifications / quick settings / Home / Back, as chosen in Settings; nothing is locked while Shizuku is off
         if (runCatching { app.aemu.core.ShizukuLockStore.read(applicationContext).enabled }.getOrDefault(false))
@@ -691,13 +693,67 @@ open class VmActivity : ComponentActivity() {
         if (android.os.Build.VERSION.SDK_INT >= 33) registerReceiver(rx, f, Context.RECEIVER_EXPORTED) else registerReceiver(rx, f)
     }
 
+    // ---- "Like a real phone" mode -------------------------------------------------------------------------------
+    private var realPhoneRx: android.content.BroadcastReceiver? = null
+    /** true while the guest was put to sleep because the host screen went off (so that only then is it woken again) */
+    private var guestSleptWithHost = false
+
+    /**
+     * Volume keys: consumed here and sent to the guest, so the host's own volume never moves and its volume panel stays
+     * away. Power: an app cannot see the host's power button, but it does see the screen going off and on; the guest gets a
+     * Power press at each, so it sleeps with the host screen and shows ITS lock screen when the host screen comes back.
+     * The host's lock screen is skipped (the window shows over it and wakes the screen), so only the guest's is seen.
+     */
+    private fun enableRealPhoneMode() {
+        setShowWhenLocked(true)
+        setTurnScreenOn(true)
+        val rx = object : android.content.BroadcastReceiver() {
+            override fun onReceive(c: Context, i: Intent) {
+                if (!::vm.isInitialized) return
+                when (i.action) {
+                    Intent.ACTION_SCREEN_OFF -> if (!guestSleptWithHost) { guestSleptWithHost = true; vm.input.press(InputService.KEY_POWER) }
+                    Intent.ACTION_SCREEN_ON -> wakeGuestWithHost()
+                }
+            }
+        }
+        realPhoneRx = rx
+        registerReceiver(rx, android.content.IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF); addAction(Intent.ACTION_SCREEN_ON)
+        })
+    }
+
+    private fun wakeGuestWithHost() {
+        if (!guestSleptWithHost || !::vm.isInitialized) return
+        guestSleptWithHost = false
+        vm.input.press(InputService.KEY_POWER)
+        // a host lock screen without a PIN is dismissed so that only the guest's lock screen is left
+        runCatching {
+            (getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager).requestDismissKeyguard(this, null)
+        }
+    }
+
+    private fun realPhone() = ::vm.isInitialized && vm.settings.realPhone
+
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        // volume keys never reach the host in this mode, whatever the keymap of the firmware is
+        if (realPhone() && (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_MUTE)) {
+            if (keyCode != KeyEvent.KEYCODE_VOLUME_MUTE) {
+                val code = if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) InputService.KEY_VOLUMEUP else InputService.KEY_VOLUMEDOWN
+                if (event.repeatCount == 0) vm.input.key(code, true)
+            }
+            return true
+        }
         val code = map(keyCode) ?: return super.onKeyDown(keyCode, event)
         if (event.repeatCount == 0) vm.input.key(code, true)
         return true
     }
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
+        if (realPhone() && (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_MUTE)) {
+            if (keyCode != KeyEvent.KEYCODE_VOLUME_MUTE)
+                vm.input.key(if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) InputService.KEY_VOLUMEUP else InputService.KEY_VOLUMEDOWN, false)
+            return true
+        }
         val code = map(keyCode) ?: return super.onKeyUp(keyCode, event)
         vm.input.key(code, false)
         return true
@@ -738,6 +794,7 @@ open class VmActivity : ComponentActivity() {
         recorder?.let { r -> recorder = null; recOn = false; thread { r.stop() } }
         if (::guest.isInitialized) guest.stop()
         shellRx?.let { runCatching { unregisterReceiver(it) } }
+        realPhoneRx?.let { runCatching { unregisterReceiver(it) } }; realPhoneRx = null
         guestShellSession?.close()
         super.onDestroy()
     }
