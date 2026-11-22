@@ -521,9 +521,9 @@ private fun ShizukuSettings() {
             }
             InfoToggle("Disable notifications", "No alerts, pop-ups or notification icons in a machine", opts.notifications) { save(opts.copy(notifications = it)) }
             InfoToggle("Disable quick settings", "The quick settings panel cannot be pulled down in a machine", opts.quickSettings) { save(opts.copy(quickSettings = it)) }
-            InfoToggle("Disable status bar", "The phone's status bar is turned off in a machine: no icons, clock, notifications or pull-down", opts.statusBar) { save(opts.copy(statusBar = it)) }
+            InfoToggle("Disable status bar", "Hides the phone's status bar in a machine (icons, clock, notification icons), the way CleanBar does it. What was set before is put back afterwards", opts.statusBar) { save(opts.copy(statusBar = it)) }
             InfoToggle("Disable home", "The phone's Home does nothing in a machine; use the machine's own Home", opts.home) { save(opts.copy(home = it)) }
-            InfoToggle("Disable back", "The phone's Back does nothing in a machine; use the machine's own Back", opts.back) { save(opts.copy(back = it)) }
+            InfoToggle("Disable back", "The phone's Back does nothing in a machine (its back gesture is turned off); use the machine's own Back. Put back when you leave the machine", opts.back) { save(opts.copy(back = it)) }
             InfoToggle("Machine gestures", "Swipe up from the bottom edge (or the frame) is the machine's Home, swipe in from the left or right edge toward the middle is the machine's Back. The phone's own gestures do not take over", opts.vmGestures) { save(opts.copy(vmGestures = it)) }
             InfoToggle("Disable volume", "The phone's volume keys do nothing to the phone's volume: they work the machine's volume", opts.disableVolume) { save(opts.copy(disableVolume = it)) }
             InfoToggle("Disable power", "Long-press Power opens the machine's power menu, not the phone's. A short press still turns the screen off (the machine sleeps with it and shows its lock screen on wake). Needs Android 11 or newer.", opts.disablePower) { save(opts.copy(disablePower = it)) }

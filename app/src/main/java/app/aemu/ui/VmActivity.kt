@@ -333,10 +333,7 @@ open class VmActivity : ComponentActivity() {
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
             else WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
-        androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply {
-            systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-        }
+        hideSystemBars()
         val id = intent.getStringExtra(EXTRA_ID)
         val cur = VmHost.vm
         val stored = (if (id != null) ImageStore.get(this, id) else null) ?: cur?.img
@@ -614,13 +611,29 @@ open class VmActivity : ComponentActivity() {
         if (::vm.isInitialized) { vm.cameraVisible(true); vm.micVisible(true); vm.motionVisible(true); if (vm.engine == Engine.N64) vm.sensors.resume(true) }
         // Shizuku: notifications / quick settings / Home / Back, as chosen in Settings; nothing is locked while Shizuku is off
         vmResumed = true
+        hideSystemBars()
         skz = runCatching { app.aemu.core.ShizukuLockStore.read(applicationContext) }.getOrDefault(skz)
         vmRoot?.requestLayout()
+        // what the lock did (or why not) is written in the machine's log
+        app.aemu.core.SystemUiLock.sink = { line -> if (::vm.isInitialized) vm.log("lock: $line") }
         if (skz.enabled) app.aemu.core.SystemUiLock.resume(this, this)
         // Shizuku "disable power": long-press Power opens the machine's power menu (the phone's own one is switched off)
         if (skz.powerActive) app.aemu.core.PowerKeyWatcher.start {
             if (vmResumed && ::vm.isInitialized) vm.input.press(InputService.KEY_POWER, 1500)
         }
+    }
+
+    /** The phone's status bar and navigation bar stay hidden: asked again whenever the window gets focus or resumes. */
+    private fun hideSystemBars() {
+        androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply {
+            systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) hideSystemBars()
     }
 
     override fun onPause() {
@@ -1564,8 +1577,14 @@ open class VmActivity : ComponentActivity() {
         // null = automatic; true/false = the person minimized or restored it
         var cardOverride by remember { mutableStateOf<Boolean?>(null) }
         LaunchedEffect(state) { if (state == GuestVm.State.RUNNING || state == GuestVm.State.FAILED || state == GuestVm.State.STOPPED) cardOverride = null }
-        val cardMinimized = cardOverride ?: (state == GuestVm.State.BOOTING)
+        val cardMinimized = cardOverride ?: (state == GuestVm.State.BOOTING || state == GuestVm.State.PREPARING)
         val bootCard = state != GuestVm.State.RUNNING && !showLog && (state == GuestVm.State.FAILED || !cardMinimized)
+        // a failure keeps the big card in the middle (it has the buttons); the boot itself is a small pill by the menu
+        // button and, when the pill is tapped, a small card under it
+        val failedCard = bootCard && state == GuestVm.State.FAILED
+        val bootPopover = bootCard && state != GuestVm.State.FAILED
+        val pillShown = (state == GuestVm.State.BOOTING || state == GuestVm.State.PREPARING) && cardMinimized && !showLog &&
+            (cardOverride == true || vm.screenUpAt == 0L)
         // with the tab bar folded away, a tiny arrow at the top right brings it back
         val revealArrow = false
         Box(Modifier.fillMaxSize()) {
@@ -1589,24 +1608,10 @@ open class VmActivity : ComponentActivity() {
             }
             // карточка загрузки
             AnimatedVisibility(
-                visible = bootCard,
+                visible = failedCard,
                 enter = fadeIn(), exit = fadeOut(),
                 modifier = Modifier.fillMaxSize(),
             ) { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { BootCard(seconds) } }
-
-            // minimized: a small pill, tap it to bring the card back
-            val pillState = state == GuestVm.State.BOOTING || state == GuestVm.State.PREPARING
-            if (pillState && cardMinimized && !showLog && (cardOverride == true || vm.screenUpAt == 0L)) {
-                Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.9f),
-                    modifier = Modifier.align(Alignment.TopStart).displayCutoutPadding().statusBarsPadding().padding(8.dp)
-                        .clip(CircleShape).clickable { cardOverride = false }) {
-                    Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        LoadingIndicator(Modifier.size(24.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(stringResource(R.string.vm_booting_short, seconds.toInt()), style = MaterialTheme.typography.labelMedium)
-                    }
-                }
-            }
 
             // журнал
             AnimatedVisibility(visible = showLog, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.fillMaxSize()) {
@@ -1618,6 +1623,38 @@ open class VmActivity : ComponentActivity() {
             if (!showLog || vm.settings.hideMenuButton) Box(Modifier.fillMaxSize().statusBarsPadding().padding(8.dp)
                 .padding(top = if (revealArrow) 16.dp else 0.dp) // the menu button stays under the arrow
                 .onSizeChanged { menuArea = it }) {
+            // "Booting": a small pill left of the menu button, and under it the card with the details; both follow the button
+            Box(Modifier.align(Alignment.TopEnd)
+                .padding(end = if (vm.settings.hideMenuButton) 0.dp else 52.dp)
+                .offset { clampMenuOffset(menuOffset).let { IntOffset(it.x.roundToInt(), it.y.roundToInt()) } }) {
+                AnimatedVisibility(
+                    visible = pillShown,
+                    enter = fadeIn(androidx.compose.animation.core.tween(220)) +
+                        androidx.compose.animation.slideInHorizontally(androidx.compose.animation.core.tween(260)) { it / 2 } +
+                        androidx.compose.animation.scaleIn(androidx.compose.animation.core.tween(260), initialScale = 0.85f,
+                            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0.5f)),
+                    exit = fadeOut(androidx.compose.animation.core.tween(160)) +
+                        androidx.compose.animation.slideOutHorizontally(androidx.compose.animation.core.tween(200)) { it / 2 },
+                ) { BootPill(seconds) { cardOverride = false } }
+            }
+            Box(Modifier.align(Alignment.TopEnd).padding(top = 52.dp)
+                .offset {
+                    val o = clampMenuOffset(menuOffset)
+                    // the card stays inside the border however far the button was dragged to the left
+                    val minX = -(menuArea.width - 300.dp.roundToPx()).coerceAtLeast(0).toFloat()
+                    IntOffset(maxOf(o.x, minX).roundToInt(), o.y.roundToInt())
+                }) {
+                AnimatedVisibility(
+                    visible = bootPopover,
+                    enter = fadeIn(androidx.compose.animation.core.tween(200)) +
+                        androidx.compose.animation.scaleIn(androidx.compose.animation.core.tween(260), initialScale = 0.8f,
+                            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0f)) +
+                        androidx.compose.animation.slideInVertically(androidx.compose.animation.core.tween(260)) { -it / 5 },
+                    exit = fadeOut(androidx.compose.animation.core.tween(140)) +
+                        androidx.compose.animation.scaleOut(androidx.compose.animation.core.tween(180), targetScale = 0.9f,
+                            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0f)),
+                ) { BootPopover(seconds) }
+            }
             Box(Modifier.align(Alignment.TopEnd)
                 .offset { clampMenuOffset(menuOffset).let { IntOffset(it.x.roundToInt(), it.y.roundToInt()) } }
                 .pointerInput(Unit) {
@@ -1962,6 +1999,70 @@ open class VmActivity : ComponentActivity() {
                     .alpha(alpha)
                     .background(androidx.compose.ui.graphics.Brush.radialGradient(listOf(c, c.copy(alpha = 0.55f), Color.Transparent)), CircleShape)
             )
+        }
+    }
+
+    /** "Booting · 12 s": a capsule in the look of the menu button, to the left of it. Tap: the details. */
+    @Composable
+    private fun BootPill(seconds: Long, onClick: () -> Unit) {
+        Row(
+            Modifier.height(44.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.55f)).clickable(onClick = onClick)
+                .padding(start = 11.dp, end = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            LoadingIndicator(Modifier.size(24.dp), color = Color.White)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                if (state == GuestVm.State.PREPARING) stringResource(R.string.st_preparing)
+                else stringResource(R.string.vm_booting_short, seconds.toInt()),
+                style = MaterialTheme.typography.labelLarge, color = Color.White, maxLines = 1,
+            )
+        }
+    }
+
+    /** What the pill opens: the machine, what it is doing and a line of the log. Simple, small, under the menu button. */
+    @Composable
+    private fun BootPopover(seconds: Long) {
+        Surface(
+            modifier = Modifier.width(300.dp).pointerInput(Unit) { detectTapGestures { } },
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.97f),
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            shadowElevation = 8.dp,
+        ) {
+            Column(Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    LoadingIndicator(Modifier.size(40.dp))
+                    Spacer(Modifier.width(14.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(vm.img.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(vm.img.displayVersion, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    when (state) {
+                        GuestVm.State.PREPARING -> stringResource(R.string.st_preparing)
+                        GuestVm.State.BOOTING -> stringResource(R.string.st_booting, seconds.toInt())
+                        GuestVm.State.STOPPING -> stringResource(R.string.st_stopping)
+                        else -> "…"
+                    },
+                    style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.height(8.dp))
+                androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth().clip(CircleShape))
+                if (vm.img.bootCount == 0 && state == GuestVm.State.BOOTING) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(stringResource(R.string.first_boot_hint), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                val last = logLines.lastOrNull()?.substringAfter(' ').orEmpty()
+                if (last.isNotBlank()) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(last, style = Mono, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
         }
     }
 
