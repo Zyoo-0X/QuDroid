@@ -90,6 +90,7 @@ import androidx.compose.ui.unit.dp
 import app.aemu.AppPrefs
 import app.aemu.BuildConfig
 import app.aemu.R
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -150,9 +151,9 @@ private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
 
     if (accentDialog) {
         ColorPickerDialog(
-            initial = if (accent == 0) Color(0xFFF4511E) else Color(accent),
+            initial = if (accent == 0) AppPurple else Color(accent),
             onDismiss = { accentDialog = false },
-            onReset = { accent = 0; AppPrefs.setAccentColor(ctx, 0); accentDialog = false; onRestyle() },
+            onReset = { accent = FirstRunDefaults.PURPLE; AppPrefs.setAccentColor(ctx, FirstRunDefaults.PURPLE); accentDialog = false; onRestyle() },
             onApply = { c ->
                 val argb = c.toArgb() or 0xFF000000.toInt()
                 accent = argb; AppPrefs.setAccentColor(ctx, argb); accentDialog = false; onRestyle()
@@ -230,7 +231,7 @@ private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
 
             item { StaggerIn(2, seen) {
                 Section(stringResource(R.string.as_updates)) {
-                    Toggle(
+                    InfoToggle(
                         stringResource(R.string.as_auto_updates),
                         stringResource(R.string.as_auto_updates_sub),
                         autoUpdates
@@ -250,21 +251,21 @@ private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
 
             item { StaggerIn(3, seen) {
                 Section(stringResource(R.string.as_appearance)) {
-                    Toggle(stringResource(R.string.as_new_home), stringResource(R.string.as_new_home_sub), newHome) {
+                    InfoToggle(stringResource(R.string.as_new_home), stringResource(R.string.as_new_home_sub), newHome) {
                         newHome = it; AppPrefs.setNewHome(ctx, it)
                     }
-                    Toggle(stringResource(R.string.as_library_3d), stringResource(R.string.as_library_3d_sub), library3d) {
+                    InfoToggle(stringResource(R.string.as_library_3d), stringResource(R.string.as_library_3d_sub), library3d) {
                         library3d = it; AppPrefs.setLibrary3d(ctx, it)
                     }
-                    Toggle(stringResource(R.string.as_builtin_browser), stringResource(R.string.as_builtin_browser_sub), builtinBrowser) {
+                    InfoToggle(stringResource(R.string.as_builtin_browser), stringResource(R.string.as_builtin_browser_sub), builtinBrowser) {
                         builtinBrowser = it; AppPrefs.setBuiltinBrowser(ctx, it)
                     }
                     if (app.aemu.core.HostDisplayPolicy.rotateWindow(ctx.resources.configuration.smallestScreenWidthDp)) {
-                        Toggle(stringResource(R.string.as_tablet_navbar_rotation), stringResource(R.string.as_tablet_navbar_rotation_sub), hostUi.tabletNavbarRotation) {
+                        InfoToggle(stringResource(R.string.as_tablet_navbar_rotation), stringResource(R.string.as_tablet_navbar_rotation_sub), hostUi.tabletNavbarRotation) {
                             hostUi = hostUi.copy(tabletNavbarRotation = it); AppPrefs.setHostUiOptions(ctx, hostUi)
                         }
                     }
-                    Toggle(stringResource(R.string.as_cutout_barrier), stringResource(R.string.as_cutout_barrier_sub), hostUi.cutoutBarrier) {
+                    InfoToggle(stringResource(R.string.as_cutout_barrier), stringResource(R.string.as_cutout_barrier_sub), hostUi.cutoutBarrier) {
                         hostUi = hostUi.copy(cutoutBarrier = it); AppPrefs.setHostUiOptions(ctx, hostUi)
                     }
                     // the navigation bar style is now part of the VM screen theme (Original, Sunset, 2.x-5.x eras, own themes)
@@ -299,13 +300,13 @@ private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
                         trailingContent = {
                             androidx.compose.foundation.layout.Box(Modifier.size(28.dp)
                                 .clip(androidx.compose.foundation.shape.CircleShape)
-                                .background(if (accent == 0) Color(0xFFF4511E) else Color(accent)))
+                                .background(if (accent == 0) AppPurple else Color(accent)))
                         },
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                         modifier = Modifier.clickable { accentDialog = true },
                     )
                     if (Build.VERSION.SDK_INT >= 31 && accent == 0) {
-                        Toggle(stringResource(R.string.as_dynamic), stringResource(R.string.as_dynamic_sub), dynamic) {
+                        InfoToggle(stringResource(R.string.as_dynamic), stringResource(R.string.as_dynamic_sub), dynamic) {
                             dynamic = it; AppPrefs.setDynamicColor(ctx, it)
                         }
                     }
@@ -315,13 +316,13 @@ private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
             item { StaggerIn(4, seen) {
                 Section(stringResource(R.string.as_defaults), stringResource(R.string.as_defaults_sub)) {
                     fun set(s: app.aemu.core.VmSettings) { defaults = s; AppPrefs.setDefaults(ctx, s) }
-                    Toggle(stringResource(R.string.vs_gpu), stringResource(R.string.vs_gpu_sub), defaults.gpu) { set(defaults.copy(gpu = it)) }
-                    Toggle(stringResource(R.string.vs_jit), stringResource(R.string.vs_jit_sub), defaults.jit) { set(defaults.copy(jit = it)) }
-                    Toggle(stringResource(R.string.vs_proxy), stringResource(R.string.vs_proxy_sub), defaults.netProxy) { set(defaults.copy(netProxy = it)) }
-                    Toggle(stringResource(R.string.vs_nav), stringResource(R.string.vs_nav_sub), defaults.showNavBar) { set(defaults.copy(showNavBar = it)) }
+                    InfoToggle(stringResource(R.string.vs_gpu), stringResource(R.string.vs_gpu_sub), defaults.gpu) { set(defaults.copy(gpu = it)) }
+                    InfoToggle(stringResource(R.string.vs_jit), stringResource(R.string.vs_jit_sub), defaults.jit) { set(defaults.copy(jit = it)) }
+                    InfoToggle(stringResource(R.string.vs_proxy), stringResource(R.string.vs_proxy_sub), defaults.netProxy) { set(defaults.copy(netProxy = it)) }
+                    InfoToggle(stringResource(R.string.vs_nav), stringResource(R.string.vs_nav_sub), defaults.showNavBar) { set(defaults.copy(showNavBar = it)) }
                     NavigationSettings(defaults, set = ::set)
-                    Toggle(stringResource(R.string.vs_awake), stringResource(R.string.vs_awake_sub), defaults.keepScreenOn) { set(defaults.copy(keepScreenOn = it)) }
-                    Toggle(stringResource(R.string.as_led), stringResource(R.string.as_led_sub), defaults.showLed) { set(defaults.copy(showLed = it)) }
+                    InfoToggle(stringResource(R.string.vs_awake), stringResource(R.string.vs_awake_sub), defaults.keepScreenOn) { set(defaults.copy(keepScreenOn = it)) }
+                    InfoToggle(stringResource(R.string.as_led), stringResource(R.string.as_led_sub), defaults.showLed) { set(defaults.copy(showLed = it)) }
                 }
             } }
 
@@ -429,17 +430,17 @@ private fun ShizukuSettings() {
         else -> "Shizuku is ready"
     }
     Section("Shizuku", "Lock parts of the phone while a machine is on screen") {
-        Toggle("Use Shizuku", status, opts.enabled) { on ->
+        InfoToggle("Use Shizuku", status, opts.enabled) { on ->
             save(opts.copy(enabled = on))
             if (on && running && !granted) app.aemu.core.ShizukuAccess.request()
         }
         if (opts.enabled) {
             if (!running) Row_(Icons.Rounded.Lock, "Start Shizuku", "Shizuku must be running. Tap to open it.") { openShizuku() }
             else if (!granted) Row_(Icons.Rounded.Lock, "Allow QuDroid", "Tap to give QuDroid permission in Shizuku") { app.aemu.core.ShizukuAccess.request() }
-            Toggle("Disable notifications", "No alerts, pop-ups or notification icons in a machine", opts.notifications) { save(opts.copy(notifications = it)) }
-            Toggle("Disable quick settings", "The quick settings panel cannot be pulled down in a machine", opts.quickSettings) { save(opts.copy(quickSettings = it)) }
-            Toggle("Disable home", "The phone's Home does nothing in a machine; use the machine's own Home", opts.home) { save(opts.copy(home = it)) }
-            Toggle("Disable back", "The phone's Back does nothing in a machine; use the machine's own Back", opts.back) { save(opts.copy(back = it)) }
+            InfoToggle("Disable notifications", "No alerts, pop-ups or notification icons in a machine", opts.notifications) { save(opts.copy(notifications = it)) }
+            InfoToggle("Disable quick settings", "The quick settings panel cannot be pulled down in a machine", opts.quickSettings) { save(opts.copy(quickSettings = it)) }
+            InfoToggle("Disable home", "The phone's Home does nothing in a machine; use the machine's own Home", opts.home) { save(opts.copy(home = it)) }
+            InfoToggle("Disable back", "The phone's Back does nothing in a machine; use the machine's own Back", opts.back) { save(opts.copy(back = it)) }
             Row_(Icons.Rounded.Lock, "Leaving a machine", "Use the menu button at the top of the machine: Minimize or Shutdown") { }
             Row_(Icons.Rounded.Lock, "Unlock the phone now", "Tap if notifications, quick settings, Home or Back stay disabled") {
                 Thread { app.aemu.core.SystemUiLock.releaseNow(ctx) }.start()
@@ -500,5 +501,61 @@ private fun SettingsHero() {
                 Text("v${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium, color = cs.onPrimary.copy(alpha = 0.85f))
             }
         }
+    }
+}
+
+/** The app's default accent: purple. */
+private val AppPurple = Color(0xFF9C27B0)
+
+/**
+ * Once, on the first launch of this version: the Android button bar and the LED are off by default and the accent
+ * colour is purple. Later changes by the user are kept (the flag stops it from running again).
+ */
+object FirstRunDefaults {
+    const val PURPLE: Int = 0xFF9C27B0.toInt()
+    private const val PREF = "qudroid_onboarding"
+    private const val KEY = "defaults_purple_v1"
+
+    fun apply(ctx: Context) {
+        val sp = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+        if (sp.getBoolean(KEY, false)) return
+        runCatching {
+            AppPrefs.setDefaults(ctx, AppPrefs.defaults(ctx).copy(showNavBar = false, showLed = false))
+            AppPrefs.setAccentColor(ctx, PURPLE)
+        }
+        sp.edit().putBoolean(KEY, true).apply()
+    }
+}
+
+/**
+ * A switch row whose small description is hidden behind an (i) next to the name, before the switch: tap the (i)
+ * and the description opens in a dialog. The rest of the row still flips the switch.
+ */
+@Composable
+private fun InfoToggle(title: String, info: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    ListItem(
+        headlineContent = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, modifier = Modifier.weight(1f, fill = false))
+                if (info.isNotEmpty()) {
+                    IconButton(onClick = { open = true }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Rounded.Info, "Info", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+        },
+        trailingContent = { Switch(checked = checked, onCheckedChange = onChange) },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        modifier = Modifier.fillMaxWidth().clickable { onChange(!checked) },
+    )
+    if (open) {
+        AlertDialog(
+            onDismissRequest = { open = false },
+            icon = { Icon(Icons.Rounded.Info, null) },
+            title = { Text(title) },
+            text = { Text(info) },
+            confirmButton = { TextButton(onClick = { open = false }) { Text(stringResource(R.string.close)) } },
+        )
     }
 }

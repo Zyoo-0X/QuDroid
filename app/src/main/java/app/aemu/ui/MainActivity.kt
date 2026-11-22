@@ -146,6 +146,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        FirstRunDefaults.apply(applicationContext) // nav bar + LED off, purple accent (once)
         // permissions are asked on the first-launch screen (PermissionOnboardingScreen), not all at once here
         handleView(intent)
         // Back in the library with machines running sends the app to the background instead of closing the window
