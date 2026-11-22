@@ -51,8 +51,8 @@ sealed interface UpdateState {
 /** Modified for AEmulator Sunset on 2026-09-30: use the fork's releases.
  * Modified for AEmulator Plus on 2026-10-04: use the Plus releases. GPL-3.0; see NOTICE.md. */
 object AppUpdateManager {
-    private const val RELEASES_API = "https://api.github.com/repos/somerandomusernam2/AEmulator-Plus/releases"
-    private const val GITHUB_REPO_URL = "https://github.com/somerandomusernam2/AEmulator-Plus"
+    private const val RELEASES_API = "https://api.github.com/repos/Zyoo-0X/QuDroid/releases"
+    private const val GITHUB_REPO_URL = "https://github.com/Zyoo-0X/QuDroid"
 
     /**
      * Запрос к GitHub API для получения информации о последнем релизе с APK-файлом.
@@ -64,7 +64,7 @@ object AppUpdateManager {
             conn.connectTimeout = 15000
             conn.readTimeout = 15000
             conn.setRequestProperty("Accept", "application/vnd.github+json")
-            conn.setRequestProperty("User-Agent", "AEmulator-Plus-App")
+            conn.setRequestProperty("User-Agent", "QuDroid-App")
 
             if (conn.responseCode != HttpURLConnection.HTTP_OK) {
                 throw Exception("HTTP ${conn.responseCode}: ${conn.responseMessage}")
@@ -84,23 +84,26 @@ object AppUpdateManager {
                 val body = rel.optString("body", "")
 
                 val assets = rel.optJSONArray("assets") ?: continue
-                for (j in 0 until assets.length()) {
-                    val asset = assets.getJSONObject(j)
-                    val assetName = asset.optString("name", "")
-                    if (UpdateAssetPolicy.matches(assetName, BuildConfig.APPLICATION_ID)) {
-                        val downloadUrl = asset.getString("browser_download_url")
-                        val sizeBytes = asset.optLong("size", 0L)
-                        return@runCatching ReleaseInfo(
-                            versionName = versionName,
-                            tagName = tagName,
-                            title = title,
-                            body = body,
-                            downloadUrl = downloadUrl,
-                            fileName = assetName,
-                            sizeBytes = sizeBytes
-                        )
-                    }
-                }
+                // any .apk of the release; the one named after this package first, unsigned / debug ones last
+                val asset = (0 until assets.length()).map { assets.getJSONObject(it) }
+                    .filter { UpdateAssetPolicy.matches(it.optString("name", ""), BuildConfig.APPLICATION_ID) }
+                    .sortedBy { a ->
+                        val n = a.optString("name", "").lowercase()
+                        when {
+                            BuildConfig.APPLICATION_ID.lowercase() in n -> 0
+                            "unsigned" in n || "debug" in n -> 2
+                            else -> 1
+                        }
+                    }.firstOrNull() ?: continue
+                return@runCatching ReleaseInfo(
+                    versionName = versionName,
+                    tagName = tagName,
+                    title = title,
+                    body = body,
+                    downloadUrl = asset.getString("browser_download_url"),
+                    fileName = asset.optString("name", ""),
+                    sizeBytes = asset.optLong("size", 0L)
+                )
             }
             null
         }
@@ -116,12 +119,10 @@ object AppUpdateManager {
 
         if (cleanLatest.equals(cleanCurrent, ignoreCase = true)) return false
 
-        val latestParts = cleanLatest.split('.').map { segment ->
-            segment.takeWhile { it.isDigit() }.toIntOrNull() ?: 0
-        }
-        val currentParts = cleanCurrent.split('.').map { segment ->
-            segment.takeWhile { it.isDigit() }.toIntOrNull() ?: 0
-        }
+        // the first dotted number in the tag ("v1.2.3", "build-12", "1.2.3-beta")
+        val num = Regex("""\d+(?:\.\d+)*""")
+        val latestParts = (num.find(cleanLatest)?.value ?: return false).split('.').map { it.toIntOrNull() ?: 0 }
+        val currentParts = (num.find(cleanCurrent)?.value ?: return true).split('.').map { it.toIntOrNull() ?: 0 }
 
         val maxLen = maxOf(latestParts.size, currentParts.size)
         for (i in 0 until maxLen) {
@@ -150,7 +151,7 @@ object AppUpdateManager {
         // Очищаем старые apk перед новой загрузкой
         updatesDir.listFiles()?.forEach { if (it.extension.equals("apk", ignoreCase = true)) it.delete() }
 
-        val targetFile = File(updatesDir, "aemulator-plus-${release.versionName}.apk")
+        val targetFile = File(updatesDir, "qudroid-${release.versionName}.apk")
 
         // Fix: cancelling the coroutine did not stop the download. Reads on HttpURLConnection block and ignore
         // coroutine cancellation, so the transfer ran to the end and its progress callbacks flipped the UI back to
@@ -175,7 +176,7 @@ object AppUpdateManager {
                         conn.connectTimeout = 15000
                         conn.readTimeout = 30000
                         conn.instanceFollowRedirects = true
-                        conn.setRequestProperty("User-Agent", "AEmulator-Plus-App")
+                        conn.setRequestProperty("User-Agent", "QuDroid-App")
 
                         val code = conn.responseCode
                         if (code in listOf(HttpURLConnection.HTTP_MOVED_PERM, HttpURLConnection.HTTP_MOVED_TEMP, 307, 308)) {
