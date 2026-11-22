@@ -247,7 +247,7 @@ open class VmActivity : ComponentActivity() {
     /** VM screen theme (core/VmTheme.kt): navigation bar look, frame behind the guest, screen corners */
     private var vmTheme by mutableStateOf(app.aemu.core.VmThemes.BUILT_IN[1])
     private var frameView: android.widget.ImageView? = null
-    private var vmRoot: FrameLayout? = null
+    private var vmRoot: EdgeNavLayout? = null
     /** the tab bar above the guest (the same bar is in the library and in every machine's window) */
     private var tabStripView: ComposeView? = null
     /** Added for AEmulator Plus, 2026-11-12: the tab bar is folded away (full screen, the guest goes up under the camera cut-out) */
@@ -373,7 +373,14 @@ open class VmActivity : ComponentActivity() {
         if (s.realPhone || skz.powerActive) enableRealPhoneMode()
 
         val (gw, gh) = if (vm.engine == Engine.GB) 480 to 800 else s.width to s.height
-        val root = FrameLayout(this).apply { setBackgroundColor(0xff000000.toInt()) }
+        val root = EdgeNavLayout(this).apply {
+            setBackgroundColor(0xff000000.toInt())
+            // Settings > Shizuku > Machine gestures: Home from the bottom edge, Back from the side edges are the MACHINE's
+            active = { skz.enabled && skz.vmGestures }
+            guestBounds = { box.takeIf { it.width > 0 && it.height > 0 }?.let { b -> android.graphics.Rect(b.left, b.top, b.right, b.bottom) } }
+            onHome = { if (this@VmActivity::vm.isInitialized) vm.input.press(vm.input.homeCode) }
+            onBack = { if (this@VmActivity::vm.isInitialized) vm.input.press(InputService.KEY_BACK) }
+        }
         vmRoot = root
         box = FrameLayout(this)
         surfaceView = SurfaceView(this)
@@ -542,7 +549,8 @@ open class VmActivity : ComponentActivity() {
             val z = app.aemu.core.ShizukuLockStore.read(applicationContext)
             vm.log(if (z.enabled) "shizuku: on, locked: " + listOfNotNull(
                 "notifications".takeIf { z.notifications }, "quick settings".takeIf { z.quickSettings },
-                "home".takeIf { z.home }, "back".takeIf { z.back }).ifEmpty { listOf("nothing") }.joinToString(", ")
+                "home".takeIf { z.home }, "back".takeIf { z.back }, "status bar".takeIf { z.statusBar },
+                "machine gestures".takeIf { z.vmGestures }).ifEmpty { listOf("nothing") }.joinToString(", ")
             else "shizuku: off, the phone's notifications and buttons are not locked")
         }
         guest.start()
@@ -550,6 +558,8 @@ open class VmActivity : ComponentActivity() {
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
+                // the swipe that just sent the machine's Back must not send a second one when the phone's own gesture ends
+                if (android.os.SystemClock.uptimeMillis() - (vmRoot?.lastFiredAt ?: 0L) < 700L) return
                 when (VmUiPolicy.back(showLog, vm.settings.hideMenuButton)) {
                     VmUiPolicy.BackAction.CLOSE_LOG -> { showLog = false; menuOpen = false }
                     VmUiPolicy.BackAction.OPEN_MENU -> menuOpen = true
@@ -605,6 +615,7 @@ open class VmActivity : ComponentActivity() {
         // Shizuku: notifications / quick settings / Home / Back, as chosen in Settings; nothing is locked while Shizuku is off
         vmResumed = true
         skz = runCatching { app.aemu.core.ShizukuLockStore.read(applicationContext) }.getOrDefault(skz)
+        vmRoot?.requestLayout()
         if (skz.enabled) app.aemu.core.SystemUiLock.resume(this, this)
         // Shizuku "disable power": long-press Power opens the machine's power menu (the phone's own one is switched off)
         if (skz.powerActive) app.aemu.core.PowerKeyWatcher.start {

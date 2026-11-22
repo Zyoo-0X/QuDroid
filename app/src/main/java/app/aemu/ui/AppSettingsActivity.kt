@@ -502,7 +502,7 @@ private fun ShizukuSettings() {
     val status = app.aemu.core.ShizukuAccess.describe(zState)
     Section("Shizuku", "Lock parts of the phone while a machine is on screen") {
         InfoToggle("Use Shizuku", status, opts.enabled) { on ->
-            save(if (on) opts.copy(enabled = true, notifications = true, quickSettings = true, home = true, back = true, disableVolume = true, disablePower = true) else opts.copy(enabled = false, notifications = false, quickSettings = false, home = false, back = false, disableVolume = false, disablePower = false))
+            save(if (on) opts.copy(enabled = true, notifications = true, quickSettings = true, home = true, back = true, disableVolume = true, disablePower = true, statusBar = true, vmGestures = true) else opts.copy(enabled = false, notifications = false, quickSettings = false, home = false, back = false, disableVolume = false, disablePower = false, statusBar = false, vmGestures = false))
             if (on && zState == app.aemu.core.ShizukuAccess.State.NEEDS_PERMISSION) allow()
         }
         if (opts.enabled) {
@@ -521,8 +521,10 @@ private fun ShizukuSettings() {
             }
             InfoToggle("Disable notifications", "No alerts, pop-ups or notification icons in a machine", opts.notifications) { save(opts.copy(notifications = it)) }
             InfoToggle("Disable quick settings", "The quick settings panel cannot be pulled down in a machine", opts.quickSettings) { save(opts.copy(quickSettings = it)) }
+            InfoToggle("Disable status bar", "The phone's status bar is turned off in a machine: no icons, clock, notifications or pull-down", opts.statusBar) { save(opts.copy(statusBar = it)) }
             InfoToggle("Disable home", "The phone's Home does nothing in a machine; use the machine's own Home", opts.home) { save(opts.copy(home = it)) }
             InfoToggle("Disable back", "The phone's Back does nothing in a machine; use the machine's own Back", opts.back) { save(opts.copy(back = it)) }
+            InfoToggle("Machine gestures", "Swipe up from the bottom edge (or the frame) is the machine's Home, swipe in from the left or right edge toward the middle is the machine's Back. The phone's own gestures do not take over", opts.vmGestures) { save(opts.copy(vmGestures = it)) }
             InfoToggle("Disable volume", "The phone's volume keys do nothing to the phone's volume: they work the machine's volume", opts.disableVolume) { save(opts.copy(disableVolume = it)) }
             InfoToggle("Disable power", "Long-press Power opens the machine's power menu, not the phone's. A short press still turns the screen off (the machine sleeps with it and shows its lock screen on wake). Needs Android 11 or newer.", opts.disablePower) { save(opts.copy(disablePower = it)) }
             Row_(Icons.Rounded.Lock, "Leaving a machine", "Use the menu button at the top of the machine: Minimize or Shutdown") { }
