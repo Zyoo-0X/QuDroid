@@ -1,6 +1,6 @@
 /* Modified for AEmulator Sunset through 2026-10-02: catalog, experimental
  * unlock, active-guest Open and temporary long-press LPM boot.
- * Modified for AEmulator Plus, 2026-11-01: press-and-hold reordering and folders in the library. GPL-3.0; see LICENSE and NOTICE.md. */
+ * Modified for AEmulator Plus, 2026-11-01: press-and-hold reordering and folders in the library. GPL-3.0; see NOTICE.md. */
 package app.aemu.ui
 
 import app.aemu.core.userMessageOrNull
@@ -9,12 +9,12 @@ import android.Manifest
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import android.os.Environment
-import android.provider.Settings
 import android.text.format.Formatter
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
@@ -55,12 +55,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Android
-import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.Folder
-import androidx.compose.material.icons.rounded.Lock
-import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Warning
@@ -70,14 +66,14 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -111,16 +107,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.aemu.core.GuestImage
 import app.aemu.AppPrefs
 import app.aemu.R
 import androidx.compose.ui.res.stringResource
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.List
 import android.content.Context
-import android.content.pm.PackageManager
 import androidx.compose.foundation.border
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
@@ -151,6 +146,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        // permissions are asked on the first-launch screen (PermissionOnboardingScreen), not all at once here
         handleView(intent)
         // Back in the library with machines running sends the app to the background instead of closing the window
         onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
@@ -161,19 +157,9 @@ class MainActivity : ComponentActivity() {
         })
         setContent {
             AemuTheme {
-                val prefs = remember { getSharedPreferences("qudroid_onboarding", Context.MODE_PRIVATE) }
-                var showOnboarding by remember { mutableStateOf(!prefs.getBoolean("done", false)) }
-
-                HomeWithTabs(model)
-
-                if (showOnboarding) {
-                    InitialPermissionsDialog(
-                        onRequestNotificationsAndStorage = { askPermissions() },
-                        onDone = {
-                            prefs.edit().putBoolean("done", true).apply()
-                            showOnboarding = false
-                        }
-                    )
+                var onboarded by remember { mutableStateOf(PermissionGate.isDone(this@MainActivity)) }
+                androidx.compose.animation.Crossfade(targetState = onboarded, animationSpec = androidx.compose.animation.core.tween(450), label = "onboarding") { done ->
+                    if (done) HomeWithTabs(model) else PermissionOnboardingScreen(onFinish = { onboarded = true })
                 }
             }
         }
@@ -213,193 +199,6 @@ class MainActivity : ComponentActivity() {
         // ярлыки и автоматизация: am start -a app.aemu.BOOT --es id <образ>
         if (i?.action == ACTION_BOOT) i.getStringExtra("id")?.let { VmActivity.start(this, it, i.getBooleanExtra("recovery", false)) }
     }
-
-    fun askPermissions() {
-        val want = ArrayList<String>()
-        if (Build.VERSION.SDK_INT >= 33) want += Manifest.permission.POST_NOTIFICATIONS
-        if (Build.VERSION.SDK_INT <= 32) want += Manifest.permission.WRITE_EXTERNAL_STORAGE
-        val need = want.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
-        if (need.isNotEmpty()) requestPermissions(need.toTypedArray(), 1)
-    }
-}
-
-@Composable
-private fun InitialPermissionsDialog(
-    onRequestNotificationsAndStorage: () -> Unit,
-    onDone: () -> Unit,
-) {
-    val ctx = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-
-    var notifGranted by remember {
-        mutableStateOf(
-            if (Build.VERSION.SDK_INT >= 33) {
-                ctx.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
-            } else true
-        )
-    }
-    var storageGranted by remember {
-        mutableStateOf(
-            if (Build.VERSION.SDK_INT >= 30) {
-                Environment.isExternalStorageManager()
-            } else {
-                ctx.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
-            }
-        )
-    }
-    var shizukuRunning by remember { mutableStateOf(false) }
-    var shizukuGranted by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        while (true) {
-            withContext(Dispatchers.IO) {
-                shizukuRunning = app.aemu.core.ShizukuAccess.running()
-                shizukuGranted = app.aemu.core.ShizukuAccess.granted()
-            }
-            delay(1000)
-        }
-    }
-
-    DisposableEffect(lifecycleOwner) {
-        val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
-            if (e == Lifecycle.Event.ON_RESUME) {
-                notifGranted = if (Build.VERSION.SDK_INT >= 33) {
-                    ctx.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
-                } else true
-                storageGranted = if (Build.VERSION.SDK_INT >= 30) {
-                    Environment.isExternalStorageManager()
-                } else {
-                    ctx.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
-                }
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(obs)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
-    }
-
-    AlertDialog(
-        onDismissRequest = {},
-        title = { Text("Initial Setup", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    "Grant the required permissions for the best experience. Shizuku is optional and can be skipped.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-
-                Surface(
-                    shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(Icons.Rounded.Notifications, null, tint = MaterialTheme.colorScheme.primary)
-                        Column(Modifier.weight(1f)) {
-                            Text("Notifications", style = MaterialTheme.typography.titleSmall)
-                            Text("VM status and download progress", style = MaterialTheme.typography.bodySmall)
-                        }
-                        if (notifGranted) {
-                            Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.primary)
-                        } else {
-                            FilledTonalButton(onClick = onRequestNotificationsAndStorage) {
-                                Text("Grant")
-                            }
-                        }
-                    }
-                }
-
-                Surface(
-                    shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(Icons.Rounded.Folder, null, tint = MaterialTheme.colorScheme.primary)
-                        Column(Modifier.weight(1f)) {
-                            Text("All Files Access", style = MaterialTheme.typography.titleSmall)
-                            Text("Shared ROM folder and VM storage", style = MaterialTheme.typography.bodySmall)
-                        }
-                        if (storageGranted) {
-                            Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.primary)
-                        } else {
-                            FilledTonalButton(onClick = {
-                                if (Build.VERSION.SDK_INT >= 30) {
-                                    runCatching {
-                                        ctx.startActivity(
-                                            Intent(
-                                                Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-                                                android.net.Uri.parse("package:${ctx.packageName}")
-                                            )
-                                        )
-                                    }.onFailure {
-                                        ctx.startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
-                                    }
-                                } else {
-                                    onRequestNotificationsAndStorage()
-                                }
-                            }) {
-                                Text("Grant")
-                            }
-                        }
-                    }
-                }
-
-                Surface(
-                    shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(Icons.Rounded.Lock, null, tint = MaterialTheme.colorScheme.secondary)
-                        Column(Modifier.weight(1f)) {
-                            Text("Shizuku (Optional)", style = MaterialTheme.typography.titleSmall)
-                            Text(
-                                when {
-                                    shizukuGranted -> "Ready"
-                                    shizukuRunning -> "Running, permission needed"
-                                    else -> "Not running (can be skipped)"
-                                },
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        if (shizukuGranted) {
-                            Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.primary)
-                        } else if (shizukuRunning) {
-                            FilledTonalButton(onClick = { app.aemu.core.ShizukuAccess.request() }) {
-                                Text("Grant")
-                            }
-                        } else {
-                            OutlinedButton(onClick = onDone) {
-                                Text("Skip")
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(onClick = onDone) {
-                Text("Continue")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDone) {
-                Text("Skip")
-            }
-        }
-    )
 }
 
 /** The library with the tab bar above it (the bar is only there while a machine is open). */
@@ -414,7 +213,6 @@ private fun HomeWithTabs(model: LibraryModel) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun Library(model: LibraryModel) {
     val images by model.images.collectAsState()
@@ -515,12 +313,11 @@ fun Library(model: LibraryModel) {
         topBar = {
             TopAppBar(
                 title = { Text("QuDroid", style = MaterialTheme.typography.titleLarge, maxLines = 1) },
-                actions = {
-                    HomeMenuButton(onClick = { homeMenu = true })
-                },
                 scrollBehavior = scroll,
             )
         },
+        // Add and Settings live in the menu at the bottom (like the machine menu)
+        floatingActionButton = { HomeMenuButton(onClick = { homeMenu = true }) },
     ) { pad ->
         if (newHome) {
             val full: androidx.compose.foundation.lazy.grid.LazyGridItemSpanScope.() -> androidx.compose.foundation.lazy.grid.GridItemSpan =
@@ -533,7 +330,7 @@ fun Library(model: LibraryModel) {
                 columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(148.dp),
                 modifier = Modifier.fillMaxSize().padding(pad)
                     .libraryDragGesture(controller) { haptic.performHapticFeedback(HapticFeedbackType.LongPress) },
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 120.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
@@ -581,7 +378,7 @@ fun Library(model: LibraryModel) {
             Box(Modifier.fillMaxSize().padding(pad)) {
                 if (images.isEmpty() && !imp.active) EmptyState()
                 if (view3d && images.isNotEmpty()) Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-                    .padding(start = 16.dp, end = 16.dp, bottom = 32.dp)) {
+                    .padding(start = 16.dp, end = 16.dp, bottom = 120.dp)) {
                     StorageAccessCard()
                     if (!imp.active) FirmwareFolderCard(onImport = { f -> model.import(android.net.Uri.fromFile(f)) })
                     AnimatedVisibility(imp.active || imp.error != null || imp.done != null) {
@@ -617,7 +414,7 @@ fun Library(model: LibraryModel) {
                         state = listState,
                         modifier = Modifier.fillMaxSize().clipToBounds()
                             .libraryDragGesture(controller) { haptic.performHapticFeedback(HapticFeedbackType.LongPress) },
-                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp),
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 120.dp),
                     ) {
                         item { StorageAccessCard() }
                         item { if (!imp.active) FirmwareFolderCard(onImport = { f -> model.import(android.net.Uri.fromFile(f)) }) }
@@ -845,7 +642,7 @@ private fun ContainerDialog(
             Text(
                 stringResource(R.string.vmos_add_title),
                 style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
             )
         },
         text = {
@@ -868,7 +665,7 @@ private fun ContainerDialog(
                         Text(
                             "${from.name} · ${from.displayVersion}",
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
                         )
                         Text(
                             from.skin,
@@ -965,11 +762,11 @@ private fun ContainerDialog(
 private fun StorageAccessCard() {
     if (Build.VERSION.SDK_INT < 30) return
     val ctx = LocalContext.current
-    var granted by remember { mutableStateOf(Environment.isExternalStorageManager()) }
-    val life = LocalLifecycleOwner.current
-    DisposableEffect(life) {
+    var granted by remember { mutableStateOf(android.os.Environment.isExternalStorageManager()) }
+    val life = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(life) {
         val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
-            if (e == Lifecycle.Event.ON_RESUME) granted = Environment.isExternalStorageManager()
+            if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) granted = android.os.Environment.isExternalStorageManager()
         }
         life.lifecycle.addObserver(obs)
         onDispose { life.lifecycle.removeObserver(obs) }
@@ -983,9 +780,9 @@ private fun StorageAccessCard() {
             Spacer(Modifier.height(12.dp))
             Button(onClick = {
                 runCatching {
-                    ctx.startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                    ctx.startActivity(Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
                         android.net.Uri.parse("package:${ctx.packageName}")))
-                }.onFailure { ctx.startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)) }
+                }.onFailure { ctx.startActivity(Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)) }
             }) { Text(stringResource(R.string.allow)) }
         }
     }
@@ -1091,6 +888,7 @@ private fun ImageCard(img: GuestImage, onStart: () -> Unit, onSettings: () -> Un
             Spacer(Modifier.height(10.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AssistChip(onClick = {}, label = { Text(LibraryLabels.compactSkin(img.skin), maxLines = 1, overflow = TextOverflow.Ellipsis) })
+
                 AssistChip(onClick = {}, label = { Text("${img.settings.width}×${img.settings.height}", maxLines = 1, overflow = TextOverflow.Ellipsis) })
                 AssistChip(onClick = {}, label = { Text(Formatter.formatShortFileSize(ctx, img.sizeBytes), maxLines = 1, overflow = TextOverflow.Ellipsis) })
             }
@@ -1109,9 +907,9 @@ private fun ImageCard(img: GuestImage, onStart: () -> Unit, onSettings: () -> Un
                             VmActivity.start(ctx, img.id, lowPower = true)
                         }) else null)) {
                     Row(Modifier.padding(ButtonDefaults.ButtonWithIconContentPadding), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Rounded.PlayArrow, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(stringResource(if (active) R.string.open_vm else R.string.start))
+                    Icon(Icons.Rounded.PlayArrow, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(if (active) R.string.open_vm else R.string.start))
                     }
                 }
                 Spacer(Modifier.weight(1f))
@@ -1129,10 +927,10 @@ private fun ImageCard(img: GuestImage, onStart: () -> Unit, onSettings: () -> Un
 private fun FirmwareFolderCard(onImport: (java.io.File) -> Unit) {
     val ctx = LocalContext.current
     var files by remember { mutableStateOf(emptyList<java.io.File>()) }
-    val life = LocalLifecycleOwner.current
-    DisposableEffect(life) {
+    val life = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(life) {
         val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
-            if (e == Lifecycle.Event.ON_RESUME) Thread { files = app.aemu.core.FirmwareFolder.list() }.start()
+            if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) Thread { files = app.aemu.core.FirmwareFolder.list() }.start()
         }
         life.lifecycle.addObserver(obs)
         onDispose { life.lifecycle.removeObserver(obs) }
@@ -1147,10 +945,10 @@ private fun FirmwareFolderCard(onImport: (java.io.File) -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(f.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1,
-                            overflow = TextOverflow.Ellipsis)
-                        Text(Formatter.formatShortFileSize(ctx, f.length()), style = MaterialTheme.typography.bodySmall)
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                        Text(android.text.format.Formatter.formatShortFileSize(ctx, f.length()), style = MaterialTheme.typography.bodySmall)
                     }
-                    FilledTonalButton(onClick = { onImport(f) }) { Text(stringResource(R.string.fw_folder_import)) }
+                    androidx.compose.material3.FilledTonalButton(onClick = { onImport(f) }) { Text(stringResource(R.string.fw_folder_import)) }
                 }
             }
         }

@@ -1,5 +1,4 @@
-/* Modifyed for QuDroid, 11/22/2026: name rename
- * Modified for AEmulator Plus, 2026-11-09: two machines on one tab (split screen).
+/* Modified for AEmulator Plus, 2026-11-09: two machines on one tab (split screen).
  * Modified for AEmulator Plus, 2026-11-09: several machines at once (one process slot each), one window with a tab bar.
  * Modified for AEmulator Sunset through 2026-10-03: natural-edge controls, cutout and
  * compatibility and camera integration.
@@ -8,7 +7,6 @@
 package app.aemu.ui
 
 import app.aemu.R
-import app.aemu.core.SystemUiLock
 import java.io.File
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.semantics.role
@@ -52,7 +50,9 @@ import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.RestartAlt
+import androidx.compose.material.icons.rounded.Cast
 import androidx.compose.material.icons.rounded.Screenshot
+import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Sms
 import androidx.compose.material.icons.rounded.Warning
@@ -89,6 +89,7 @@ import android.view.KeyEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
@@ -97,6 +98,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -109,6 +111,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -156,6 +159,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -169,6 +176,7 @@ import app.aemu.core.InputService
 import app.aemu.core.SplitLayout
 import app.aemu.core.TabRegistry
 import app.aemu.core.VmSlots
+import app.aemu.core.Keeper
 import kotlinx.coroutines.delay
 import kotlin.concurrent.thread
 import app.aemu.core.DisplayGeometry
@@ -194,7 +202,7 @@ object VmHost {
             vm = null
             // GL-мост нельзя поднять повторно в том же процессе — процесс уходит вместе с машиной
             Thread.sleep(300)
-            runCatching { SystemUiLock.releaseIfIdle(app) }
+            runCatching { app.aemu.core.SystemUiLock.releaseIfIdle(app) }
             android.os.Process.killProcess(android.os.Process.myPid())
         }
     }
@@ -580,11 +588,11 @@ open class VmActivity : ComponentActivity() {
         applyCutoutBarrier()
         orientationListener?.enable()
         if (::vm.isInitialized) { vm.cameraVisible(true); vm.micVisible(true); vm.motionVisible(true); if (vm.engine == Engine.N64) vm.sensors.resume(true) }
-        SystemUiLock.resume(this, this) // Shizuku: notifications / quick settings / Home / Back, as chosen in Settings
+        app.aemu.core.SystemUiLock.resume(this, this) // Shizuku: notifications / quick settings / Home / Back, as chosen in Settings
     }
 
     override fun onPause() {
-        SystemUiLock.pause(this, this)
+        app.aemu.core.SystemUiLock.pause(this, this)
         captureThumbnail()
         orientationListener?.disable()
         heldNavKeys.releaseAll()
@@ -845,7 +853,7 @@ open class VmActivity : ComponentActivity() {
             runOnUiThread { if (!isDestroyed) { if (inFront) TabNav.go(this, next); finish() } }
             Thread.sleep(300)
             // GL-мост нельзя поднять повторно в том же процессе — процесс :vm уходит вместе с машиной
-            runCatching { SystemUiLock.releaseIfIdle(app) }
+            runCatching { app.aemu.core.SystemUiLock.releaseIfIdle(app) }
             android.os.Process.killProcess(android.os.Process.myPid())
         }
     }
@@ -1411,7 +1419,7 @@ open class VmActivity : ComponentActivity() {
         try { VmRestartActivity.handoff(applicationContext, id, recovery, processLifetime, lowPower) }
         catch (_: Exception) { endingVm.set(false); toast(getString(R.string.vm_restart_failed)); return }
         finish()
-        Thread { runCatching { SystemUiLock.releaseIfIdle(applicationContext) }; android.os.Process.killProcess(android.os.Process.myPid()) }.start()
+        Thread { runCatching { app.aemu.core.SystemUiLock.releaseIfIdle(applicationContext) }; android.os.Process.killProcess(android.os.Process.myPid()) }.start()
     }
 
     // ------------------------------------------------------------------ интерфейс поверх экрана

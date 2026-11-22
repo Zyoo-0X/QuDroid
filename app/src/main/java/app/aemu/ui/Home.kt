@@ -82,6 +82,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.aemu.R
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.material.icons.rounded.MoreHoriz
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.vector.ImageVector
+import kotlinx.coroutines.delay
 import app.aemu.core.GuestImage
 
 /**
@@ -193,22 +204,81 @@ fun MachineCard(
     }
 }
 
-/** The library's menu button: floats at the bottom of the screen; it opens [HomeMenuSheet]. */
+/**
+ * Fades, slides and scales its content in, one after another by [index]. Pass the same [seen] set for a whole lazy
+ * list so a row that scrolls back into view does not play its entrance again.
+ */
+@Composable
+fun StaggerIn(index: Int, seen: MutableSet<Int>? = null, content: @Composable () -> Unit) {
+    var shown by remember { mutableStateOf(seen?.contains(index) == true) }
+    LaunchedEffect(Unit) {
+        if (!shown) {
+            delay(55L * index.coerceAtMost(10))
+            shown = true
+            seen?.add(index)
+        }
+    }
+    AnimatedVisibility(
+        visible = shown,
+        enter = fadeIn(tween(350)) +
+            slideInVertically(animationSpec = tween(450, easing = FastOutSlowInEasing), initialOffsetY = { it / 6 }) +
+            scaleIn(tween(400), initialScale = 0.94f),
+    ) { content() }
+}
+
+/**
+ * The library's menu button: just three dots, no coloured circle and no edge. It floats at the bottom of the screen
+ * and opens [HomeMenuSheet]; it gives a little under the finger like the cards do.
+ */
 @Composable
 fun HomeMenuButton(onClick: () -> Unit) {
-    FloatingActionButton(
+    val press = remember { MutableInteractionSource() }
+    val pressed by press.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.8f else 1f, spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium), label = "menuBtn")
+    IconButton(
         onClick = onClick,
-        shape = CircleShape,
-        containerColor = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        interactionSource = press,
+        modifier = Modifier.size(56.dp).graphicsLayer { scaleX = scale; scaleY = scale },
     ) {
-        Icon(Icons.Rounded.MoreVert, stringResource(R.string.menu))
+        Icon(Icons.Rounded.MoreHoriz, stringResource(R.string.menu), Modifier.size(32.dp), tint = MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+/** One big tile of the menu: a rounded square with an icon on top and the label under it. */
+@Composable
+private fun MenuTile(
+    icon: ImageVector,
+    label: String,
+    container: Color,
+    content: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val press = remember { MutableInteractionSource() }
+    val pressed by press.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.94f else 1f, spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium), label = "tile")
+    Surface(
+        onClick = onClick,
+        interactionSource = press,
+        shape = RoundedCornerShape(24.dp),
+        color = container,
+        contentColor = content,
+        modifier = modifier.graphicsLayer { scaleX = scale; scaleY = scale },
+    ) {
+        Column(Modifier.padding(16.dp).fillMaxWidth().height(88.dp), verticalArrangement = Arrangement.SpaceBetween) {
+            Box(
+                Modifier.size(40.dp).clip(RoundedCornerShape(14.dp)).background(content.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center,
+            ) { Icon(icon, null, Modifier.size(22.dp)) }
+            Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
     }
 }
 
 /**
- * The library's menu, in the style of the machine menu: a bottom sheet with "Add" (import, catalog, library, new folder)
- * and a button to the app's Settings. In the classic list [onAdd] opens its own add sheet instead.
+ * The library's menu, in the style of the app: a bottom sheet with a gradient header in the theme colours, big
+ * tiles for "Add" (import, catalog, library, new folder) and a wide Settings card. Everything slides in one after
+ * another. In the classic list [onAdd] opens its own add sheet instead.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -222,25 +292,74 @@ fun HomeMenuSheet(
     onAdd: () -> Unit,
     onSettings: () -> Unit,
 ) {
+    val cs = MaterialTheme.colorScheme
+    val tiles: List<Triple<ImageVector, String, () -> Unit>> = if (newHome) listOf(
+        Triple(Icons.Rounded.FileOpen, stringResource(R.string.add_import), onImport),
+        Triple(Icons.Rounded.List, stringResource(R.string.catalog_title), onCatalog),
+        Triple(Icons.Rounded.Inventory2, stringResource(R.string.lib_title), onLibrary),
+        Triple(Icons.Rounded.CreateNewFolder, stringResource(R.string.folder_new), onNewFolder),
+    ) else listOf(Triple(Icons.Rounded.Add, stringResource(R.string.add_firmware), onAdd))
+    val colors = listOf(
+        cs.primaryContainer to cs.onPrimaryContainer,
+        cs.secondaryContainer to cs.onSecondaryContainer,
+        cs.tertiaryContainer to cs.onTertiaryContainer,
+        cs.surfaceContainerHighest to cs.onSurface,
+    )
+    val seen = remember { mutableSetOf<Int>() }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+        containerColor = cs.surfaceContainerLow,
     ) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-            Text(stringResource(R.string.add_firmware), style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
-            if (newHome) {
-                DropdownMenuItem(text = { Text(stringResource(R.string.add_import)) }, leadingIcon = { Icon(Icons.Rounded.FileOpen, null) }, onClick = onImport)
-                DropdownMenuItem(text = { Text(stringResource(R.string.catalog_title)) }, leadingIcon = { Icon(Icons.Rounded.List, null) }, onClick = onCatalog)
-                DropdownMenuItem(text = { Text(stringResource(R.string.lib_title)) }, leadingIcon = { Icon(Icons.Rounded.Inventory2, null) }, onClick = onLibrary)
-                DropdownMenuItem(text = { Text(stringResource(R.string.folder_new)) }, leadingIcon = { Icon(Icons.Rounded.CreateNewFolder, null) }, onClick = onNewFolder)
-            } else {
-                DropdownMenuItem(text = { Text(stringResource(R.string.add_firmware)) }, leadingIcon = { Icon(Icons.Rounded.Add, null) }, onClick = onAdd)
+        Column(
+            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).navigationBarsPadding()
+                .padding(horizontal = 16.dp).padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            // header: the app's own colours as a gradient
+            StaggerIn(0, seen) {
+                Box(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp))
+                        .background(Brush.linearGradient(listOf(cs.primary, cs.tertiary)))
+                        .padding(horizontal = 20.dp, vertical = 18.dp),
+                ) {
+                    Column {
+                        Text("QuDroid", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = cs.onPrimary)
+                        Text(stringResource(R.string.add_firmware), style = MaterialTheme.typography.bodyMedium, color = cs.onPrimary.copy(alpha = 0.85f))
+                    }
+                }
             }
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
-            DropdownMenuItem(text = { Text(stringResource(R.string.settings)) }, leadingIcon = { Icon(Icons.Rounded.Settings, null) }, onClick = onSettings)
+            // tiles, two per row
+            tiles.chunked(2).forEachIndexed { row, pair ->
+                StaggerIn(1 + row, seen) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        pair.forEachIndexed { col, (icon, label, action) ->
+                            val (bg, fg) = colors[(row * 2 + col) % colors.size]
+                            MenuTile(icon, label, bg, fg, Modifier.weight(1f), action)
+                        }
+                        if (pair.size == 1) Spacer(Modifier.weight(1f))
+                    }
+                }
+            }
+            // Settings: a wide card
+            StaggerIn(1 + (tiles.size + 1) / 2, seen) {
+                Surface(
+                    onClick = onSettings,
+                    shape = RoundedCornerShape(24.dp),
+                    color = cs.surfaceContainerHigh,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Box(
+                            Modifier.size(44.dp).clip(RoundedCornerShape(15.dp)).background(cs.primary.copy(alpha = 0.14f)),
+                            contentAlignment = Alignment.Center,
+                        ) { Icon(Icons.Rounded.Settings, null, Modifier.size(24.dp), tint = cs.primary) }
+                        Text(stringResource(R.string.settings), style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    }
+                }
+            }
         }
     }
 }
