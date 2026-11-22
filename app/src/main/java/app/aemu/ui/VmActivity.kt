@@ -202,7 +202,7 @@ object VmHost {
             vm = null
             // GL-мост нельзя поднять повторно в том же процессе — процесс уходит вместе с машиной
             Thread.sleep(300)
-            runCatching { app.aemu.core.SystemUiLock.releaseIfIdle(app) }
+            runCatching { _root_ide_package_.app.aemu.core.SystemUiLock.releaseIfIdle(app) }
             android.os.Process.killProcess(android.os.Process.myPid())
         }
     }
