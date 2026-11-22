@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="vs_real_phone">Macam telefon sebenar</string>
+    <string name="vs_real_phone_sub">Kekunci volum hos mengawal volum VM; VM tidur dan bangun (dengan skrin kunci sendiri) bersama skrin hos; skrin kunci hos dilangkau.</string>
+</resources>
