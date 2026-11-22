@@ -10,9 +10,9 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -22,39 +22,37 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Code
-import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Language
+import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.rounded.Translate
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.List
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ToggleButton
@@ -80,7 +78,6 @@ import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
@@ -102,6 +99,15 @@ object Links {
     const val ORIGINAL = "https://t.me/istratiit_ech"
 }
 
+private enum class SettingsSection {
+    MAIN,
+    UPDATES,
+    APPEARANCE,
+    DEFAULTS,
+    SHIZUKU,
+    LINKS
+}
+
 class AppSettingsActivity : ComponentActivity() {
     override fun attachBaseContext(base: Context) = super.attachBaseContext(AppPrefs.wrap(base))
 
@@ -117,10 +123,12 @@ class AppSettingsActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
     val ctx = LocalContext.current
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    var section by remember { mutableStateOf(SettingsSection.MAIN) }
     var langDialog by remember { mutableStateOf(false) }
     var legalDialog by remember { mutableStateOf(false) }
     var defaults by remember { mutableStateOf(AppPrefs.defaults(ctx)) }
@@ -136,6 +144,10 @@ private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
     var newHome by remember { mutableStateOf(AppPrefs.newHome(ctx)) }
     var updateState by remember { mutableStateOf<UpdateState>(UpdateState.Idle) }
     var downloadJob by remember { mutableStateOf<Job?>(null) }
+
+    BackHandler(enabled = section != SettingsSection.MAIN) {
+        section = SettingsSection.MAIN
+    }
 
     if (accentDialog) {
         ColorPickerDialog(
@@ -193,12 +205,27 @@ private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
     val langTag = AppPrefs.language(ctx)
     val langName = AppPrefs.LANGUAGES.firstOrNull { it.first == langTag }?.second?.ifEmpty { null } ?: stringResource(R.string.as_lang_system)
 
+    val titleText = when (section) {
+        SettingsSection.MAIN -> stringResource(R.string.settings)
+        SettingsSection.UPDATES -> stringResource(R.string.as_updates)
+        SettingsSection.APPEARANCE -> stringResource(R.string.as_appearance)
+        SettingsSection.DEFAULTS -> stringResource(R.string.as_defaults)
+        SettingsSection.SHIZUKU -> "Shizuku"
+        SettingsSection.LINKS -> stringResource(R.string.as_links)
+    }
+
     Scaffold(
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
         topBar = {
             TopAppBar(
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.back)) } },
-                title = { Text(stringResource(R.string.settings), style = MaterialTheme.typography.titleLarge, maxLines = 1) },
+                navigationIcon = {
+                    IconButton(onClick = {
+                        if (section != SettingsSection.MAIN) section = SettingsSection.MAIN else onBack()
+                    }) {
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.back))
+                    }
+                },
+                title = { Text(titleText, style = MaterialTheme.typography.titleLarge, maxLines = 1) },
                 scrollBehavior = scroll,
             )
         },
@@ -207,122 +234,151 @@ private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = pad.calculateTopPadding() + 8.dp, bottom = pad.calculateBottomPadding() + 32.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            item {
-                Section(stringResource(R.string.catalog_title)) {
-                    Row_(Icons.Rounded.List, stringResource(R.string.catalog_open), "") {
-                        ctx.startActivity(Intent(ctx, RomCatalogActivity::class.java))
-                    }
-                }
-            }
-
-            item {
-                Section(stringResource(R.string.as_updates)) {
-                    Toggle(
-                        stringResource(R.string.as_auto_updates),
-                        stringResource(R.string.as_auto_updates_sub),
-                        autoUpdates
-                    ) {
-                        autoUpdates = it
-                        AppPrefs.setAutoCheckUpdates(ctx, it)
-                    }
-                    Row_(
-                        Icons.Rounded.SystemUpdate,
-                        stringResource(R.string.as_check_updates),
-                        stringResource(R.string.as_check_updates_sub, BuildConfig.VERSION_NAME)
-                    ) {
-                        checkForUpdates()
-                    }
-                }
-            }
-
-            item {
-                Section(stringResource(R.string.as_appearance)) {
-                    Toggle(stringResource(R.string.as_new_home), stringResource(R.string.as_new_home_sub), newHome) {
-                        newHome = it; AppPrefs.setNewHome(ctx, it)
-                    }
-                    Toggle(stringResource(R.string.as_library_3d), stringResource(R.string.as_library_3d_sub), library3d) {
-                        library3d = it; AppPrefs.setLibrary3d(ctx, it)
-                    }
-                    Toggle(stringResource(R.string.as_builtin_browser), stringResource(R.string.as_builtin_browser_sub), builtinBrowser) {
-                        builtinBrowser = it; AppPrefs.setBuiltinBrowser(ctx, it)
-                    }
-                    if (app.aemu.core.HostDisplayPolicy.rotateWindow(ctx.resources.configuration.smallestScreenWidthDp)) {
-                        Toggle(stringResource(R.string.as_tablet_navbar_rotation), stringResource(R.string.as_tablet_navbar_rotation_sub), hostUi.tabletNavbarRotation) {
-                            hostUi = hostUi.copy(tabletNavbarRotation = it); AppPrefs.setHostUiOptions(ctx, hostUi)
-                        }
-                    }
-                    Toggle(stringResource(R.string.as_cutout_barrier), stringResource(R.string.as_cutout_barrier_sub), hostUi.cutoutBarrier) {
-                        hostUi = hostUi.copy(cutoutBarrier = it); AppPrefs.setHostUiOptions(ctx, hostUi)
-                    }
-                    // the navigation bar style is now part of the VM screen theme (Original, Sunset, 2.x-5.x eras, own themes)
-                    VmThemeRow()
-                    Row_(Icons.Rounded.Translate, stringResource(R.string.as_language), langName) { langDialog = true }
-                    Text(stringResource(R.string.as_theme), style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp))
-                    val options = listOf(R.string.as_theme_system, R.string.as_theme_light, R.string.as_theme_dark)
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)) {
-                        options.forEachIndexed { i, res ->
-                            ToggleButton(
-                                checked = theme == i,
-                                onCheckedChange = { if (theme != i) { theme = i; AppPrefs.setTheme(ctx, i) } },
-                                shapes = when (i) {
-                                    0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
-                                    options.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
-                                    else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
-                                },
-                                modifier = Modifier.weight(1f).semantics { role = Role.RadioButton },
-                                contentPadding = PaddingValues(horizontal = 8.dp),
-                            ) {
-                                // одна строка: длинные названия («Системная») не переносятся по буквам
-                                Text(stringResource(res), maxLines = 1, softWrap = false,
-                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge)
+            when (section) {
+                SettingsSection.MAIN -> {
+                    item {
+                        Section("Settings Sections") {
+                            Row_(Icons.Rounded.List, stringResource(R.string.catalog_title), stringResource(R.string.catalog_open)) {
+                                ctx.startActivity(Intent(ctx, RomCatalogActivity::class.java))
+                            }
+                            Row_(Icons.Rounded.SystemUpdate, stringResource(R.string.as_updates), "Version ${BuildConfig.VERSION_NAME}") {
+                                section = SettingsSection.UPDATES
+                            }
+                            Row_(Icons.Rounded.Palette, stringResource(R.string.as_appearance), "Theme, accent color, layout & language") {
+                                section = SettingsSection.APPEARANCE
+                            }
+                            Row_(Icons.Rounded.Tune, stringResource(R.string.as_defaults), stringResource(R.string.as_defaults_sub)) {
+                                section = SettingsSection.DEFAULTS
+                            }
+                            Row_(Icons.Rounded.Lock, "Shizuku", "Lock parts of the phone while a machine is on screen") {
+                                section = SettingsSection.SHIZUKU
+                            }
+                            Row_(Icons.Rounded.Info, stringResource(R.string.as_links), "Author, repositories & licenses") {
+                                section = SettingsSection.LINKS
                             }
                         }
                     }
-                    ListItem(
-                        headlineContent = { Text(stringResource(R.string.as_accent)) },
-                        supportingContent = { Text(if (accent == 0) stringResource(R.string.as_accent_default)
-                            else "#%06X".format(accent and 0xFFFFFF)) },
-                        trailingContent = {
-                            androidx.compose.foundation.layout.Box(Modifier.size(28.dp)
-                                .clip(androidx.compose.foundation.shape.CircleShape)
-                                .background(if (accent == 0) Color(0xFFF4511E) else Color(accent)))
-                        },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        modifier = Modifier.clickable { accentDialog = true },
-                    )
-                    if (Build.VERSION.SDK_INT >= 31 && accent == 0) {
-                        Toggle(stringResource(R.string.as_dynamic), stringResource(R.string.as_dynamic_sub), dynamic) {
-                            dynamic = it; AppPrefs.setDynamicColor(ctx, it)
+                }
+
+                SettingsSection.UPDATES -> {
+                    item {
+                        Section(stringResource(R.string.as_updates)) {
+                            Toggle(
+                                stringResource(R.string.as_auto_updates),
+                                stringResource(R.string.as_auto_updates_sub),
+                                autoUpdates
+                            ) {
+                                autoUpdates = it
+                                AppPrefs.setAutoCheckUpdates(ctx, it)
+                            }
+                            Row_(
+                                Icons.Rounded.SystemUpdate,
+                                stringResource(R.string.as_check_updates),
+                                stringResource(R.string.as_check_updates_sub, BuildConfig.VERSION_NAME)
+                            ) {
+                                checkForUpdates()
+                            }
                         }
                     }
                 }
-            }
 
-            item {
-                Section(stringResource(R.string.as_defaults), stringResource(R.string.as_defaults_sub)) {
-                    fun set(s: app.aemu.core.VmSettings) { defaults = s; AppPrefs.setDefaults(ctx, s) }
-                    Toggle(stringResource(R.string.vs_gpu), stringResource(R.string.vs_gpu_sub), defaults.gpu) { set(defaults.copy(gpu = it)) }
-                    Toggle(stringResource(R.string.vs_jit), stringResource(R.string.vs_jit_sub), defaults.jit) { set(defaults.copy(jit = it)) }
-                    Toggle(stringResource(R.string.vs_proxy), stringResource(R.string.vs_proxy_sub), defaults.netProxy) { set(defaults.copy(netProxy = it)) }
-                    Toggle(stringResource(R.string.vs_nav), stringResource(R.string.vs_nav_sub), defaults.showNavBar) { set(defaults.copy(showNavBar = it)) }
-                    NavigationSettings(defaults, set = ::set)
-                    Toggle(stringResource(R.string.vs_awake), stringResource(R.string.vs_awake_sub), defaults.keepScreenOn) { set(defaults.copy(keepScreenOn = it)) }
-                    Toggle(stringResource(R.string.as_led), stringResource(R.string.as_led_sub), defaults.showLed) { set(defaults.copy(showLed = it)) }
+                SettingsSection.APPEARANCE -> {
+                    item {
+                        Section(stringResource(R.string.as_appearance)) {
+                            Toggle(stringResource(R.string.as_new_home), stringResource(R.string.as_new_home_sub), newHome) {
+                                newHome = it; AppPrefs.setNewHome(ctx, it)
+                            }
+                            Toggle(stringResource(R.string.as_library_3d), stringResource(R.string.as_library_3d_sub), library3d) {
+                                library3d = it; AppPrefs.setLibrary3d(ctx, it)
+                            }
+                            Toggle(stringResource(R.string.as_builtin_browser), stringResource(R.string.as_builtin_browser_sub), builtinBrowser) {
+                                builtinBrowser = it; AppPrefs.setBuiltinBrowser(ctx, it)
+                            }
+                            if (app.aemu.core.HostDisplayPolicy.rotateWindow(ctx.resources.configuration.smallestScreenWidthDp)) {
+                                Toggle(stringResource(R.string.as_tablet_navbar_rotation), stringResource(R.string.as_tablet_navbar_rotation_sub), hostUi.tabletNavbarRotation) {
+                                    hostUi = hostUi.copy(tabletNavbarRotation = it); AppPrefs.setHostUiOptions(ctx, hostUi)
+                                }
+                            }
+                            Toggle(stringResource(R.string.as_cutout_barrier), stringResource(R.string.as_cutout_barrier_sub), hostUi.cutoutBarrier) {
+                                hostUi = hostUi.copy(cutoutBarrier = it); AppPrefs.setHostUiOptions(ctx, hostUi)
+                            }
+                            // the navigation bar style is now part of the VM screen theme (Original, Sunset, 2.x-5.x eras, own themes)
+                            VmThemeRow()
+                            Row_(Icons.Rounded.Translate, stringResource(R.string.as_language), langName) { langDialog = true }
+                            Text(stringResource(R.string.as_theme), style = MaterialTheme.typography.labelLarge,
+                                modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp))
+                            val options = listOf(R.string.as_theme_system, R.string.as_theme_light, R.string.as_theme_dark)
+                            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)) {
+                                options.forEachIndexed { i, res ->
+                                    ToggleButton(
+                                        checked = theme == i,
+                                        onCheckedChange = { if (theme != i) { theme = i; AppPrefs.setTheme(ctx, i) } },
+                                        shapes = when (i) {
+                                            0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+                                            options.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+                                            else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
+                                        },
+                                        modifier = Modifier.weight(1f).semantics { role = Role.RadioButton },
+                                        contentPadding = PaddingValues(horizontal = 8.dp),
+                                    ) {
+                                        // одна строка: длинные названия («Системная») не переносятся по буквам
+                                        Text(stringResource(res), maxLines = 1, softWrap = false,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge)
+                                    }
+                                }
+                            }
+                            ListItem(
+                                headlineContent = { Text(stringResource(R.string.as_accent)) },
+                                supportingContent = { Text(if (accent == 0) stringResource(R.string.as_accent_default)
+                                    else "#%06X".format(accent and 0xFFFFFF)) },
+                                trailingContent = {
+                                    androidx.compose.foundation.layout.Box(Modifier.size(28.dp)
+                                        .clip(androidx.compose.foundation.shape.CircleShape)
+                                        .background(if (accent == 0) Color(0xFFF4511E) else Color(accent)))
+                                },
+                                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                                modifier = Modifier.clickable { accentDialog = true },
+                            )
+                            if (Build.VERSION.SDK_INT >= 31 && accent == 0) {
+                                Toggle(stringResource(R.string.as_dynamic), stringResource(R.string.as_dynamic_sub), dynamic) {
+                                    dynamic = it; AppPrefs.setDynamicColor(ctx, it)
+                                }
+                            }
+                        }
+                    }
                 }
-            }
 
-            item { ShizukuSettings() }
+                SettingsSection.DEFAULTS -> {
+                    item {
+                        Section(stringResource(R.string.as_defaults), stringResource(R.string.as_defaults_sub)) {
+                            fun set(s: app.aemu.core.VmSettings) { defaults = s; AppPrefs.setDefaults(ctx, s) }
+                            Toggle(stringResource(R.string.vs_gpu), stringResource(R.string.vs_gpu_sub), defaults.gpu) { set(defaults.copy(gpu = it)) }
+                            Toggle(stringResource(R.string.vs_jit), stringResource(R.string.vs_jit_sub), defaults.jit) { set(defaults.copy(jit = it)) }
+                            Toggle(stringResource(R.string.vs_proxy), stringResource(R.string.vs_proxy_sub), defaults.netProxy) { set(defaults.copy(netProxy = it)) }
+                            Toggle(stringResource(R.string.vs_nav), stringResource(R.string.vs_nav_sub), defaults.showNavBar) { set(defaults.copy(showNavBar = it)) }
+                            NavigationSettings(defaults, set = ::set)
+                            Toggle(stringResource(R.string.vs_awake), stringResource(R.string.vs_awake_sub), defaults.keepScreenOn) { set(defaults.copy(keepScreenOn = it)) }
+                            Toggle(stringResource(R.string.as_led), stringResource(R.string.as_led_sub), defaults.showLed) { set(defaults.copy(showLed = it)) }
+                        }
+                    }
+                }
 
-            item {
-                Section(stringResource(R.string.as_links)) {
-                    Row_(Icons.Rounded.Person, stringResource(R.string.as_author), "Zyoo-0X") { open(Links.AUTHOR) }
-                    Row_(Icons.Rounded.History, stringResource(R.string.as_orig), "t.me/istratiit_ech") { open(Links.ORIGINAL) }
-                    Row_(Icons.Rounded.Code, stringResource(R.string.as_github), "github.com/Zyoo-0X/QuDroid") { open(Links.GITHUB) }
-                    Row_(Icons.Rounded.History, stringResource(R.string.as_upstream_row, "AEmulator Plus"), "github.com/somerandomusernam2/AEmulator-Plus") { open(Links.PLUS) }
-                    Row_(Icons.Rounded.History, stringResource(R.string.as_upstream_row, "AEmulator Sunset"), "github.com/drel4/AEmulator-Sunset") { open(Links.SUNSET) }
-                    Row_(Icons.Rounded.History, stringResource(R.string.as_original_row, "AEmulator"), "github.com/uxazu/AEmulator") { open(Links.UPSTREAM) }
-                    Row_(Icons.Rounded.Code, stringResource(R.string.as_license_notices), "GPL-3.0") { legalDialog = true }
+                SettingsSection.SHIZUKU -> {
+                    item { ShizukuSettings() }
+                }
+
+                SettingsSection.LINKS -> {
+                    item {
+                        Section(stringResource(R.string.as_links)) {
+                            Row_(Icons.Rounded.Person, stringResource(R.string.as_author), "Zyoo-0X") { open(Links.AUTHOR) }
+                            Row_(Icons.Rounded.History, stringResource(R.string.as_orig), "t.me/istratiit_ech") { open(Links.ORIGINAL) }
+                            Row_(Icons.Rounded.Code, stringResource(R.string.as_github), "github.com/Zyoo-0X/QuDroid") { open(Links.GITHUB) }
+                            Row_(Icons.Rounded.History, stringResource(R.string.as_upstream_row, "AEmulator Plus"), "github.com/somerandomusernam2/AEmulator-Plus") { open(Links.PLUS) }
+                            Row_(Icons.Rounded.History, stringResource(R.string.as_upstream_row, "AEmulator Sunset"), "github.com/drel4/AEmulator-Sunset") { open(Links.SUNSET) }
+                            Row_(Icons.Rounded.History, stringResource(R.string.as_original_row, "AEmulator"), "github.com/uxazu/AEmulator") { open(Links.UPSTREAM) }
+                            Row_(Icons.Rounded.Code, stringResource(R.string.as_license_notices), "GPL-3.0") { legalDialog = true }
+                        }
+                    }
                 }
             }
         }
