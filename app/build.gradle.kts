@@ -149,7 +149,7 @@ tasks.register<Copy>("copyReleaseApks") {
     val v = android.defaultConfig.versionName
     from(layout.buildDirectory.dir("outputs/apk/release")) {
         include("*.apk")
-        rename { "QuDroid-Plus-app.aemu.plus.apk" }
+        rename { "QuDroid-Plus-app.qudroid.vm.apk" }
     }
     into(rootProject.layout.projectDirectory.dir("release-apks/$v"))
 }
