@@ -18,10 +18,50 @@ val copyLegalNotices = tasks.register<Copy>("copyLegalNotices") {
     into(legalAssetsDir.map { it.dir("legal") })
 }
 
+// Penandatanganan TETAP: setiap APK (release & debug, tempatan & CI) mesti guna kunci yang sama, kalau tidak Android
+// menolak update dengan "package conflicts with an existing package". Urutan keutamaan:
+//   1. pemboleh ubah persekitaran QUDROID_STORE_FILE / _STORE_PASSWORD / _KEY_ALIAS / _KEY_PASSWORD (GitHub Secrets)
+//   2. keystore.properties di root (tidak dalam repo, untuk kunci peribadi)
+//   3. app/signing/signing.properties (kunci tetap dalam repo)
 val signProps = Properties().apply {
-    rootProject.file("keystore.properties").takeIf { it.isFile }?.inputStream()?.use { load(it) }
+    val env = System.getenv("QUDROID_STORE_FILE")?.takeIf { it.isNotBlank() }
+    if (env != null) {
+        setProperty("storeFile", env)
+        setProperty("storePassword", System.getenv("QUDROID_STORE_PASSWORD") ?: "")
+        setProperty("keyAlias", System.getenv("QUDROID_KEY_ALIAS") ?: "")
+        setProperty("keyPassword", System.getenv("QUDROID_KEY_PASSWORD") ?: "")
+    } else {
+        val f = listOf(rootProject.file("keystore.properties"), file("signing/signing.properties"))
+            .firstOrNull { it.isFile }
+        f?.inputStream()?.use { load(it) }
+        f?.let { setProperty("baseDir", it.parentFile.absolutePath) }
+    }
 }
-val canSign = signProps.getProperty("storeFile")?.let { rootProject.file(it).isFile } == true
+val signStore: File? = signProps.getProperty("storeFile")?.let { path ->
+    val base = signProps.getProperty("baseDir")
+    listOfNotNull(File(path).takeIf { it.isAbsolute }, base?.let { File(it, path) }, rootProject.file(path))
+        .firstOrNull { it.isFile }
+}
+val canSign = signStore != null
+if (!canSign) logger.warn("QuDroid: tiada kunci tandatangan ditemui; APK tidak akan boleh dikemas kini dengan APK lain.")
+
+// versionCode mesti sentiasa NAIK pada setiap release. Ia dikira daripada versionName (1.0.0-beta.8 -> 1000028):
+// M*1_000_000 + m*10_000 + p*100 + peringkat (alpha 1-19, beta 21-49, rc 51-89, stabil 99).
+fun versionCodeOf(name: String): Int {
+    val core = name.trim().removePrefix("v").substringBefore('-').substringBefore('+')
+    val n = core.split('.').map { it.toIntOrNull() ?: 0 }
+    val base = n.getOrElse(0) { 0 } * 1_000_000 + n.getOrElse(1) { 0 } * 10_000 + n.getOrElse(2) { 0 } * 100
+    val pre = name.trim().substringAfter('-', "").lowercase()
+    if (pre.isEmpty()) return base + 99
+    val num = Regex("\\d+").find(pre)?.value?.toIntOrNull() ?: 0
+    val stage = when {
+        pre.startsWith("alpha") -> minOf(num, 19)
+        pre.startsWith("beta") -> 20 + minOf(num, 29)
+        pre.startsWith("rc") -> 50 + minOf(num, 39)
+        else -> 20 + minOf(num, 29)
+    }
+    return base + stage
+}
 
 val engineSrc = file("src/main/assets/engines")
 val engineOut = layout.buildDirectory.dir("generated/engineAssets")
@@ -56,14 +96,15 @@ android {
         applicationId = "app.qudroid.zyoo0x"
         minSdk = 26
         targetSdk = 28
-        versionCode = 315
-        versionName = "1.0.0"
+        // versionName diubah oleh workflow (sed/regex) dan versionCode dikira daripadanya
+        versionName = "1.0.0-beta.8"
+        versionCode = versionCodeOf("1.0.0-beta.8")
         ndk { abiFilters += listOf("arm64-v8a") }
     }
 
     signingConfigs {
         if (canSign) create("release") {
-            storeFile = rootProject.file(signProps.getProperty("storeFile"))
+            storeFile = signStore
             storePassword = signProps.getProperty("storePassword")
             keyAlias = signProps.getProperty("keyAlias")
             keyPassword = signProps.getProperty("keyPassword")
