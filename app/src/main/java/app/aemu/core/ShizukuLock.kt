@@ -52,46 +52,133 @@ object ShizukuLockStore {
     }
 }
 
-/** Talking to the Shizuku app: is it running, has this app been allowed, run a shell command through it. */
+/** Talking to the Shizuku app: is it installed, running, has this app been allowed, run a shell command through it. */
 object ShizukuAccess {
+    const val MANAGER_PACKAGE = "moe.shizuku.privileged.api"
+    const val DOWNLOAD_URL = "https://shizuku.rikka.app/download/"
+
+    enum class State { NOT_INSTALLED, NOT_RUNNING, TOO_OLD, NEEDS_PERMISSION, DENIED_FOR_GOOD, READY }
+    enum class Ask { ASKED, OPEN_SHIZUKU, NOT_RUNNING, TOO_OLD }
+
+    @Volatile private var appCtx: Context? = null
+    @Volatile private var vmProcess = false
+    @Volatile private var mainProcess = false
+
+    /** Only the app's main process cleans up after a crashed machine; machine processes must not (see AemuApp). */
+    fun isMainProcess(): Boolean = mainProcess
+
+    fun installed(ctx: Context): Boolean = runCatching {
+        ctx.packageManager.getPackageInfo(MANAGER_PACKAGE, 0); true
+    }.getOrDefault(false)
+
     fun running(): Boolean = runCatching { Shizuku.pingBinder() }.getOrDefault(false)
+
+    /** Shizuku older than v11 cannot give this app a permission through the API. */
+    fun tooOld(): Boolean = runCatching { running() && Shizuku.isPreV11() }.getOrDefault(false)
 
     fun granted(): Boolean = runCatching {
         running() && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
     }.getOrDefault(false)
 
-    fun request(code: Int = 1001) { runCatching { if (running()) Shizuku.requestPermission(code) } }
+    /** The person chose "deny and don't ask again": the system dialog never shows again, only the Shizuku app can allow. */
+    fun deniedForGood(): Boolean = runCatching {
+        running() && !granted() && Shizuku.shouldShowRequestPermissionRationale()
+    }.getOrDefault(false)
 
-    /** A machine's process gets the Shizuku binder a moment after it starts. */
+    fun state(ctx: Context): State = when {
+        running() -> when {
+            tooOld() -> State.TOO_OLD
+            granted() -> State.READY
+            deniedForGood() -> State.DENIED_FOR_GOOD
+            else -> State.NEEDS_PERMISSION
+        }
+        installed(ctx) -> State.NOT_RUNNING
+        else -> State.NOT_INSTALLED
+    }
+
+    /**
+     * Asks Shizuku to allow this app. When the system dialog cannot show (denied for good) the answer is
+     * [Ask.OPEN_SHIZUKU]: the caller sends the person to the Shizuku app (Authorized apps).
+     */
+    fun request(code: Int = 1001): Ask = when {
+        !running() -> Ask.NOT_RUNNING
+        tooOld() -> Ask.TOO_OLD
+        deniedForGood() -> Ask.OPEN_SHIZUKU
+        else -> { runCatching { Shizuku.requestPermission(code) }; Ask.ASKED }
+    }
+
+    /** Opens the Shizuku app (to start it or to allow QuDroid), or its download page when it is not installed. */
+    fun openManager(ctx: Context) {
+        val launch = ctx.packageManager.getLaunchIntentForPackage(MANAGER_PACKAGE)
+        runCatching {
+            ctx.startActivity((launch ?: android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(DOWNLOAD_URL)))
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
+    }
+
+    /** What to tell the person for each state. */
+    fun describe(s: State): String = when (s) {
+        State.NOT_INSTALLED -> "Shizuku is not installed"
+        State.NOT_RUNNING -> "Shizuku is not running"
+        State.TOO_OLD -> "Shizuku is too old, update the Shizuku app"
+        State.NEEDS_PERMISSION -> "Shizuku is running, permission needed"
+        State.DENIED_FOR_GOOD -> "QuDroid was denied in Shizuku, allow it in the Shizuku app"
+        State.READY -> "Shizuku is ready"
+    }
+
+    /**
+     * A machine's process gets the Shizuku binder a moment after it starts, and only if it asks for it: it is asked
+     * again while waiting (Shizuku may have started after the machine, or the first answer may have been lost).
+     */
     fun awaitReady(ms: Long = 3000): Boolean {
         val end = System.currentTimeMillis() + ms
+        var nextAsk = 0L
         while (System.currentTimeMillis() < end) {
             if (granted()) return true
-            try { Thread.sleep(150) } catch (_: InterruptedException) { break }
+            val now = System.currentTimeMillis()
+            if (vmProcess && !running() && now >= nextAsk) { nextAsk = now + 500; askProviderForBinder() }
+            try { Thread.sleep(100) } catch (_: InterruptedException) { break }
         }
         return granted()
     }
 
-    /** Runs [cmd] as the shell user. Returns the exit code and what the command printed (-1 when it could not run). */
-    fun exec(vararg cmd: String): Pair<Int, String> = try {
-        val m = Shizuku::class.java.getDeclaredMethod(
-            "newProcess", Array<String>::class.java, Array<String>::class.java, String::class.java)
-        m.isAccessible = true
-        val p = m.invoke(null, arrayOf(*cmd), null, null) as Process
-        val out = p.inputStream.bufferedReader().readText()
-        val err = p.errorStream.bufferedReader().readText()
-        p.waitFor() to (out + err).trim()
-    } catch (t: Throwable) {
-        -1 to (t.message ?: t.toString())
+    private fun askProviderForBinder() {
+        val app = appCtx ?: return
+        runCatching {
+            Class.forName("rikka.shizuku.ShizukuProvider")
+                .getMethod("requestBinderForNonProviderProcess", Context::class.java).invoke(null, app)
+        }
     }
 
-    /** Starts [cmd] as the shell user and returns the running process (for output that is read as it comes), or null. */
-    fun spawn(vararg cmd: String): Process? = try {
+    private fun newProcess(cmd: Array<out String>): Process? = try {
         val m = Shizuku::class.java.getDeclaredMethod(
             "newProcess", Array<String>::class.java, Array<String>::class.java, String::class.java)
         m.isAccessible = true
         m.invoke(null, arrayOf(*cmd), null, null) as Process
     } catch (t: Throwable) { null }
+
+    /** Runs [cmd] as the shell user. Returns the exit code and what the command printed (-1 when it could not run). */
+    fun exec(vararg cmd: String): Pair<Int, String> {
+        if (!running()) return -1 to "Shizuku is not running"
+        val p = newProcess(cmd) ?: return -1 to "Shizuku could not start the command"
+        return try {
+            // both pipes are read at the same time: a command that fills one of them would otherwise never end
+            val err = StringBuilder()
+            val reader = Thread {
+                runCatching { p.errorStream.bufferedReader().use { r -> err.append(r.readText()) } }
+            }.apply { isDaemon = true; start() }
+            val out = p.inputStream.bufferedReader().use { it.readText() }
+            val code = p.waitFor()
+            reader.join(1000)
+            code to (out + err).trim()
+        } catch (t: Throwable) {
+            runCatching { p.destroy() }
+            -1 to (t.message ?: t.toString())
+        }
+    }
+
+    /** Starts [cmd] as the shell user and returns the running process (for output that is read as it comes), or null. */
+    fun spawn(vararg cmd: String): Process? = if (running()) newProcess(cmd) else null
 
     /**
      * Machines run in their own processes (":vm", ":vm1", ...), the Shizuku provider is in the main one: the machine
@@ -101,7 +188,10 @@ object ShizukuAccess {
         val name = runCatching { File("/proc/self/cmdline").readText().trim('\u0000') }.getOrDefault("")
         val isMain = name == app.packageName
         val isVm = name.startsWith(app.packageName + ":vm")
+        mainProcess = isMain
+        vmProcess = isVm
         if (!isMain && !isVm) return
+        appCtx = app
         runCatching {
             val c = Class.forName("rikka.shizuku.ShizukuProvider")
             c.getMethod("enableMultiProcessSupport", java.lang.Boolean.TYPE).invoke(null, isMain)
@@ -162,17 +252,30 @@ object SystemUiLock {
         val app = ctx.applicationContext
         if (!marker(app).exists()) return
         if (liveHolders(app) > 0) return
-        releaseNow(app)
+        // wait for Shizuku BEFORE taking the lock, then look again: a machine window may have come on screen meanwhile
+        if (!ShizukuAccess.awaitReady(2000)) return
+        synchronized(this) {
+            if (liveHolders(app) > 0) return
+            releaseLocked(app)
+        }
     }
 
     /** Unlocks everything. Blocking: call it off the main thread. */
-    @Synchronized
     fun releaseNow(ctx: Context) {
         val app = ctx.applicationContext
         if (!ShizukuAccess.awaitReady(2000)) return
-        ShizukuAccess.exec("cmd", "statusbar", "send-disable-flag", "none")
+        synchronized(this) { releaseLocked(app) }
+    }
+
+    private fun releaseLocked(app: Context) {
+        var (code, _) = ShizukuAccess.exec("cmd", "statusbar", "send-disable-flag", "none")
+        if (code != 0) { // once more: the status bar service may be busy
+            try { Thread.sleep(300) } catch (_: InterruptedException) { }
+            code = ShizukuAccess.exec("cmd", "statusbar", "send-disable-flag", "none").first
+        }
         restorePowerLongPress(app)
-        runCatching { marker(app).delete() }
+        // the marker stays when the system did not take the unlock back: the next start tries again
+        if (code == 0) runCatching { marker(app).delete() }
     }
 
     @Synchronized
@@ -193,7 +296,13 @@ object SystemUiLock {
         if (use.isEmpty() && !o.disablePower) return
         runCatching { marker(app).writeText("1") } // before the command: a lock without a marker could never be taken back
         if (o.disablePower) holdPowerLongPress(app)
-        if (use.isNotEmpty()) ShizukuAccess.exec("cmd", "statusbar", "send-disable-flag", *use.toTypedArray())
+        if (use.isNotEmpty()) {
+            var code = ShizukuAccess.exec("cmd", "statusbar", "send-disable-flag", *use.toTypedArray()).first
+            if (code != 0) {
+                try { Thread.sleep(300) } catch (_: InterruptedException) { }
+                code = ShizukuAccess.exec("cmd", "statusbar", "send-disable-flag", *use.toTypedArray()).first
+            }
+        }
     }
 
     private const val POWER_LONG = "power_button_long_press"
