@@ -842,18 +842,18 @@ open class VmActivity : ComponentActivity() {
     private fun stopVm() {
         if (!endingVm.compareAndSet(false, true)) return
         val id = vm.img.id
-        val app = applicationContext
+        val appCtx = applicationContext
         val inFront = lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED) && !isFinishing && !isDestroyed
-        val next = TabNav.neighbor(app, id)
+        val next = TabNav.neighbor(appCtx, id)
         thread {
             runCatching { vm.stop() }
             VmHost.vm = null
-            TabRegistry.close(app, id)
+            TabRegistry.close(appCtx, id)
             // only this window goes (the other tabs and the library share the task): show a neighbour, then close this one
             runOnUiThread { if (!isDestroyed) { if (inFront) TabNav.go(this, next); finish() } }
             Thread.sleep(300)
             // GL-мост нельзя поднять повторно в том же процессе — процесс :vm уходит вместе с машиной
-            runCatching { app.aemu.core.SystemUiLock.releaseIfIdle(app) }
+            runCatching { app.aemu.core.SystemUiLock.releaseIfIdle(appCtx) }
             android.os.Process.killProcess(android.os.Process.myPid())
         }
     }
