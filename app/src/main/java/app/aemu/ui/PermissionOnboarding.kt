@@ -235,7 +235,7 @@ fun PermissionOnboardingScreen(onFinish: () -> Unit) {
             runCatching {
                 val cur = app.aemu.core.ShizukuLockStore.read(ctx)
                 if (!cur.enabled) app.aemu.core.ShizukuLockStore.write(ctx,
-                    cur.copy(enabled = true, notifications = true, quickSettings = true, home = true, back = true))
+                    cur.copy(enabled = true, notifications = true, quickSettings = true, home = true, back = true, disableVolume = true, disablePower = true))
             }
         }
     }

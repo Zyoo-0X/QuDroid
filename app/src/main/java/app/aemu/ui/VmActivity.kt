@@ -369,7 +369,8 @@ open class VmActivity : ComponentActivity() {
         userFrac = loadScreenFrac(vm.img.id)
         showLed = s.showLed
         if (s.keepScreenOn) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        if (s.realPhone) enableRealPhoneMode()
+        skz = app.aemu.core.ShizukuLockStore.read(applicationContext)
+        if (s.realPhone || skz.powerActive) enableRealPhoneMode()
 
         val (gw, gh) = if (vm.engine == Engine.GB) 480 to 800 else s.width to s.height
         val root = FrameLayout(this).apply { setBackgroundColor(0xff000000.toInt()) }
@@ -602,11 +603,17 @@ open class VmActivity : ComponentActivity() {
         if (realPhone()) wakeGuestWithHost()
         if (::vm.isInitialized) { vm.cameraVisible(true); vm.micVisible(true); vm.motionVisible(true); if (vm.engine == Engine.N64) vm.sensors.resume(true) }
         // Shizuku: notifications / quick settings / Home / Back, as chosen in Settings; nothing is locked while Shizuku is off
-        if (runCatching { app.aemu.core.ShizukuLockStore.read(applicationContext).enabled }.getOrDefault(false))
-            app.aemu.core.SystemUiLock.resume(this, this)
+        vmResumed = true
+        skz = runCatching { app.aemu.core.ShizukuLockStore.read(applicationContext) }.getOrDefault(skz)
+        if (skz.enabled) app.aemu.core.SystemUiLock.resume(this, this)
+        // Shizuku "disable power": long-press Power opens the machine's power menu (the phone's own one is switched off)
+        if (skz.powerActive) app.aemu.core.PowerKeyWatcher.start {
+            if (vmResumed && ::vm.isInitialized) vm.input.press(InputService.KEY_POWER, 1500)
+        }
     }
 
     override fun onPause() {
+        vmResumed = false
         app.aemu.core.SystemUiLock.pause(this, this)
         captureThumbnail()
         orientationListener?.disable()
@@ -697,6 +704,9 @@ open class VmActivity : ComponentActivity() {
     private var realPhoneRx: android.content.BroadcastReceiver? = null
     /** true while the guest was put to sleep because the host screen went off (so that only then is it woken again) */
     private var guestSleptWithHost = false
+    /** the Shizuku choices (disable volume / disable power), read when the window starts and on every resume */
+    private var skz = app.aemu.core.ShizukuOptions()
+    @Volatile private var vmResumed = false
 
     /**
      * Volume keys: consumed here and sent to the guest, so the host's own volume never moves and its volume panel stays
@@ -711,7 +721,12 @@ open class VmActivity : ComponentActivity() {
             override fun onReceive(c: Context, i: Intent) {
                 if (!::vm.isInitialized) return
                 when (i.action) {
-                    Intent.ACTION_SCREEN_OFF -> if (!guestSleptWithHost) { guestSleptWithHost = true; vm.input.press(InputService.KEY_POWER) }
+                    Intent.ACTION_SCREEN_OFF -> {
+                        if (app.aemu.core.PowerKeyWatcher.longPressedWithin(2500)) {
+                            // the long press that opened the machine's power menu ends with the phone turning its screen off: wake it again
+                            Thread { app.aemu.core.ShizukuAccess.exec("input", "keyevent", "KEYCODE_WAKEUP") }.start()
+                        } else if (realPhone() && !guestSleptWithHost) { guestSleptWithHost = true; vm.input.press(InputService.KEY_POWER) }
+                    }
                     Intent.ACTION_SCREEN_ON -> wakeGuestWithHost()
                 }
             }
@@ -733,10 +748,12 @@ open class VmActivity : ComponentActivity() {
     }
 
     private fun realPhone() = ::vm.isInitialized && vm.settings.realPhone
+    /** the phone's volume keys go to the machine: "like a real phone" or Shizuku's "disable volume" */
+    private fun captureVolume() = realPhone() || skz.volumeActive
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         // volume keys never reach the host in this mode, whatever the keymap of the firmware is
-        if (realPhone() && (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_MUTE)) {
+        if (captureVolume() && (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_MUTE)) {
             if (keyCode != KeyEvent.KEYCODE_VOLUME_MUTE) {
                 val code = if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) InputService.KEY_VOLUMEUP else InputService.KEY_VOLUMEDOWN
                 if (event.repeatCount == 0) vm.input.key(code, true)
@@ -749,7 +766,7 @@ open class VmActivity : ComponentActivity() {
     }
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
-        if (realPhone() && (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_MUTE)) {
+        if (captureVolume() && (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_MUTE)) {
             if (keyCode != KeyEvent.KEYCODE_VOLUME_MUTE)
                 vm.input.key(if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) InputService.KEY_VOLUMEUP else InputService.KEY_VOLUMEDOWN, false)
             return true
@@ -795,6 +812,7 @@ open class VmActivity : ComponentActivity() {
         if (::guest.isInitialized) guest.stop()
         shellRx?.let { runCatching { unregisterReceiver(it) } }
         realPhoneRx?.let { runCatching { unregisterReceiver(it) } }; realPhoneRx = null
+        app.aemu.core.PowerKeyWatcher.stop()
         guestShellSession?.close()
         super.onDestroy()
     }
