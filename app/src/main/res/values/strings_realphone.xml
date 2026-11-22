@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="vs_real_phone">Like a real phone</string>
+    <string name="vs_real_phone_sub">Host volume keys control the VM volume; the guest sleeps and wakes (with its lock screen) with the host screen; the host lock screen is skipped.</string>
+</resources>

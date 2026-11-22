@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="vs_match_phone">Same as this phone</string>
+    <string name="vs_match_phone_sub">Use this phone\'s screen size and DPI for the VM (applies after a full VM restart). Turn off to type your own width, height and DPI.</string>
+</resources>
