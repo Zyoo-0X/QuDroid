@@ -23,8 +23,12 @@ data class ShizukuOptions(
     val disableVolume: Boolean = false,
     /** long-press Power opens the machine's power menu, not the phone's (a short press still turns the screen off) */
     val disablePower: Boolean = false,
+    /** the phone's whole status bar goes: icons, clock, pull-down (notifications and quick settings) */
+    val statusBar: Boolean = false,
+    /** the machine's own gestures: swipe up from the bottom edge = its Home, swipe in from a side edge = its Back */
+    val vmGestures: Boolean = false,
 ) {
-    val any: Boolean get() = enabled && (notifications || quickSettings || home || back || disableVolume || disablePower)
+    val any: Boolean get() = enabled && (notifications || quickSettings || home || back || disableVolume || disablePower || statusBar || vmGestures)
     val powerActive: Boolean get() = enabled && disablePower
     val volumeActive: Boolean get() = enabled && disableVolume
 }
@@ -36,7 +40,8 @@ object ShizukuLockStore {
     fun read(ctx: Context): ShizukuOptions = runCatching {
         val j = JSONObject(file(ctx).openRead().bufferedReader().use { it.readText() })
         ShizukuOptions(j.optBoolean("enabled"), j.optBoolean("notifications"), j.optBoolean("quickSettings"),
-            j.optBoolean("home"), j.optBoolean("back"), j.optBoolean("disableVolume"), j.optBoolean("disablePower"))
+            j.optBoolean("home"), j.optBoolean("back"), j.optBoolean("disableVolume"), j.optBoolean("disablePower"),
+            j.optBoolean("statusBar"), j.optBoolean("vmGestures"))
     }.getOrDefault(ShizukuOptions())
 
     fun write(ctx: Context, o: ShizukuOptions) {
@@ -46,6 +51,7 @@ object ShizukuLockStore {
             s.write(JSONObject().put("enabled", o.enabled).put("notifications", o.notifications)
                 .put("quickSettings", o.quickSettings).put("home", o.home).put("back", o.back)
                 .put("disableVolume", o.disableVolume).put("disablePower", o.disablePower)
+                .put("statusBar", o.statusBar).put("vmGestures", o.vmGestures)
                 .toString().toByteArray(Charsets.UTF_8))
             f.finishWrite(s)
         } catch (e: Throwable) { f.failWrite(s); throw e }
@@ -285,6 +291,9 @@ object SystemUiLock {
         // Recents is locked with Home: otherwise the app switcher is a way out of the machine
         if (o.home) want += listOf("home", "recents")
         if (o.back) want += "back"
+        // the whole bar: icons, clock, alerts and every way to pull it down
+        if (o.statusBar) want += listOf("system-icons", "clock", "notification-icons", "notification-alerts", "notification-peek",
+            "statusbar-expansion", "quick-settings", "notification-shade")
         return want.toList()
     }
 
