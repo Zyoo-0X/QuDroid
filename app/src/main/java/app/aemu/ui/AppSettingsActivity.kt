@@ -90,7 +90,15 @@ import androidx.compose.ui.unit.dp
 import app.aemu.AppPrefs
 import app.aemu.BuildConfig
 import app.aemu.R
-import androidx.compose.material.icons.rounded.Info
+import androidx.compose.animation.togetherWith
+import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.material3.Surface
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -140,8 +148,6 @@ private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
     var accentDialog by remember { mutableStateOf(false) }
     var hostUi by remember { mutableStateOf(AppPrefs.hostUiOptions(ctx)) }
     val scope = rememberCoroutineScope()
-    // rows that already played their entrance (a row that scrolls back does not play it again)
-    val seen = remember { mutableSetOf<Int>() }
     var autoUpdates by remember { mutableStateOf(AppPrefs.autoCheckUpdates(ctx)) }
     var library3d by remember { mutableStateOf(AppPrefs.library3d(ctx)) }
     var builtinBrowser by remember { mutableStateOf(AppPrefs.builtinBrowser(ctx)) }
@@ -168,7 +174,7 @@ private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
             res.fold(
                 onSuccess = { rel ->
                     if (rel != null) {
-                        if (AppUpdateManager.isNewerVersion(rel.versionName, BuildConfig.VERSION_NAME)) {
+                        if (UpdateVersion.isNewer(rel.versionName, BuildConfig.VERSION_NAME)) {
                             updateState = UpdateState.Available(rel)
                         } else {
                             updateState = UpdateState.UpToDate(BuildConfig.VERSION_NAME, rel.tagName)
@@ -205,31 +211,70 @@ private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
     val langTag = AppPrefs.language(ctx)
     val langName = AppPrefs.LANGUAGES.firstOrNull { it.first == langTag }?.second?.ifEmpty { null } ?: stringResource(R.string.as_lang_system)
 
+    // Settings is a list of buttons; a button opens just its own options
+    var page by remember { mutableStateOf<String?>(null) }
+    androidx.activity.compose.BackHandler(enabled = page != null) { page = null }
+    val pageTitle = when (page) {
+        "updates" -> stringResource(R.string.as_updates)
+        "appearance" -> stringResource(R.string.as_appearance)
+        "defaults" -> stringResource(R.string.as_defaults)
+        "shizuku" -> "Shizuku"
+        "links" -> stringResource(R.string.as_links)
+        else -> stringResource(R.string.settings)
+    }
+
     Scaffold(
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
         topBar = {
             TopAppBar(
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.back)) } },
-                title = { Text(stringResource(R.string.settings), style = MaterialTheme.typography.titleLarge, maxLines = 1) },
+                navigationIcon = { IconButton(onClick = { if (page != null) page = null else onBack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.back)) } },
+                title = { Text(pageTitle, style = MaterialTheme.typography.titleLarge, maxLines = 1) },
                 scrollBehavior = scroll,
             )
         },
     ) { pad ->
-        LazyColumn(
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = pad.calculateTopPadding() + 8.dp, bottom = pad.calculateBottomPadding() + 32.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            item { StaggerIn(0, seen) { SettingsHero() } }
-
-            item { StaggerIn(1, seen) {
-                Section(stringResource(R.string.catalog_title)) {
-                    Row_(Icons.Rounded.List, stringResource(R.string.catalog_open), "") {
-                        ctx.startActivity(Intent(ctx, RomCatalogActivity::class.java))
-                    }
-                }
-            } }
-
-            item { StaggerIn(2, seen) {
+        androidx.compose.animation.AnimatedContent(
+            targetState = page,
+            modifier = Modifier.fillMaxSize(),
+            transitionSpec = {
+                val deeper = targetState != null
+                (androidx.compose.animation.slideInHorizontally(androidx.compose.animation.core.tween(320)) { if (deeper) it / 3 else -it / 3 } +
+                    androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(320))) togetherWith
+                    (androidx.compose.animation.slideOutHorizontally(androidx.compose.animation.core.tween(320)) { if (deeper) -it / 3 else it / 3 } +
+                        androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(200)))
+            },
+            label = "settingsPage",
+        ) { p ->
+            val seen = remember(p) { mutableSetOf<Int>() }
+            LazyColumn(
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = pad.calculateTopPadding() + 8.dp, bottom = pad.calculateBottomPadding() + 32.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                if (p == null) {
+                    item(key = "hero") { StaggerIn(0, seen) { SettingsHero() } }
+                    item(key = "hub_catalog") { StaggerIn(1, seen) {
+                        SettingsHubTile(Icons.Rounded.List, stringResource(R.string.catalog_title), stringResource(R.string.catalog_open)) {
+                            ctx.startActivity(Intent(ctx, RomCatalogActivity::class.java))
+                        }
+                    } }
+                    item(key = "hub_updates") { StaggerIn(2, seen) {
+                        SettingsHubTile(Icons.Rounded.SystemUpdate, stringResource(R.string.as_updates), "v${BuildConfig.VERSION_NAME}") { page = "updates" }
+                    } }
+                    item(key = "hub_appearance") { StaggerIn(3, seen) {
+                        SettingsHubTile(Icons.Rounded.Palette, stringResource(R.string.as_appearance), langName) { page = "appearance" }
+                    } }
+                    item(key = "hub_defaults") { StaggerIn(4, seen) {
+                        SettingsHubTile(Icons.Rounded.Tune, stringResource(R.string.as_defaults), stringResource(R.string.as_defaults_sub)) { page = "defaults" }
+                    } }
+                    item(key = "hub_shizuku") { StaggerIn(5, seen) {
+                        SettingsHubTile(Icons.Rounded.Lock, "Shizuku", "Lock parts of the phone while a machine is on screen") { page = "shizuku" }
+                    } }
+                    item(key = "hub_links") { StaggerIn(6, seen) {
+                        SettingsHubTile(Icons.Rounded.Person, stringResource(R.string.as_links), "Zyoo-0X") { page = "links" }
+                    } }
+                } else {
+                    when (p) {
+                    "updates" -> item(key = "updates") { StaggerIn(0, seen) {
                 Section(stringResource(R.string.as_updates)) {
                     InfoToggle(
                         stringResource(R.string.as_auto_updates),
@@ -247,9 +292,8 @@ private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
                         checkForUpdates()
                     }
                 }
-            } }
-
-            item { StaggerIn(3, seen) {
+                    } }
+                    "appearance" -> item(key = "appearance") { StaggerIn(0, seen) {
                 Section(stringResource(R.string.as_appearance)) {
                     InfoToggle(stringResource(R.string.as_new_home), stringResource(R.string.as_new_home_sub), newHome) {
                         newHome = it; AppPrefs.setNewHome(ctx, it)
@@ -311,9 +355,8 @@ private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
                         }
                     }
                 }
-            } }
-
-            item { StaggerIn(4, seen) {
+                    } }
+                    "defaults" -> item(key = "defaults") { StaggerIn(0, seen) {
                 Section(stringResource(R.string.as_defaults), stringResource(R.string.as_defaults_sub)) {
                     fun set(s: app.aemu.core.VmSettings) { defaults = s; AppPrefs.setDefaults(ctx, s) }
                     InfoToggle(stringResource(R.string.vs_gpu), stringResource(R.string.vs_gpu_sub), defaults.gpu) { set(defaults.copy(gpu = it)) }
@@ -324,11 +367,11 @@ private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
                     InfoToggle(stringResource(R.string.vs_awake), stringResource(R.string.vs_awake_sub), defaults.keepScreenOn) { set(defaults.copy(keepScreenOn = it)) }
                     InfoToggle(stringResource(R.string.as_led), stringResource(R.string.as_led_sub), defaults.showLed) { set(defaults.copy(showLed = it)) }
                 }
-            } }
-
-            item { StaggerIn(5, seen) { ShizukuSettings() } }
-
-            item { StaggerIn(6, seen) {
+                    } }
+                    "shizuku" -> item(key = "shizuku") { StaggerIn(0, seen) {
+                ShizukuSettings()
+                    } }
+                    "links" -> item(key = "links") { StaggerIn(0, seen) {
                 Section(stringResource(R.string.as_links)) {
                     Row_(Icons.Rounded.Person, stringResource(R.string.as_author), "Zyoo-0X") { open(Links.AUTHOR) }
                     Row_(Icons.Rounded.History, stringResource(R.string.as_orig), "t.me/istratiit_ech") { open(Links.ORIGINAL) }
@@ -338,7 +381,10 @@ private fun AppSettings(onBack: () -> Unit, onRestyle: () -> Unit) {
                     Row_(Icons.Rounded.History, stringResource(R.string.as_original_row, "AEmulator"), "github.com/uxazu/AEmulator") { open(Links.UPSTREAM) }
                     Row_(Icons.Rounded.Code, stringResource(R.string.as_license_notices), "GPL-3.0") { legalDialog = true }
                 }
-            } }
+                    } }
+                    }
+                }
+            }
         }
     }
 
@@ -431,7 +477,7 @@ private fun ShizukuSettings() {
     }
     Section("Shizuku", "Lock parts of the phone while a machine is on screen") {
         InfoToggle("Use Shizuku", status, opts.enabled) { on ->
-            save(opts.copy(enabled = on))
+            save(if (on) opts.copy(enabled = true, notifications = true, quickSettings = true, home = true, back = true) else opts.copy(enabled = false))
             if (on && running && !granted) app.aemu.core.ShizukuAccess.request()
         }
         if (opts.enabled) {
@@ -527,35 +573,31 @@ object FirstRunDefaults {
     }
 }
 
-/**
- * A switch row whose small description is hidden behind an (i) next to the name, before the switch: tap the (i)
- * and the description opens in a dialog. The rest of the row still flips the switch.
- */
+/** One button of the Settings list: icon, name, a short line under it and an arrow. Tapping opens that part. */
 @Composable
-private fun InfoToggle(title: String, info: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    ListItem(
-        headlineContent = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(title, modifier = Modifier.weight(1f, fill = false))
-                if (info.isNotEmpty()) {
-                    IconButton(onClick = { open = true }, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Rounded.Info, "Info", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-                    }
-                }
+private fun SettingsHubTile(icon: ImageVector, title: String, sub: String, onClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val press = remember { MutableInteractionSource() }
+    val pressed by press.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.97f else 1f, spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium), label = "hubTile")
+    Surface(
+        onClick = onClick,
+        interactionSource = press,
+        shape = RoundedCornerShape(26.dp),
+        color = cs.surfaceContainer,
+        modifier = Modifier.fillMaxWidth().graphicsLayer { scaleX = scale; scaleY = scale },
+    ) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Box(
+                Modifier.size(50.dp).clip(RoundedCornerShape(17.dp)).background(cs.primary.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center,
+            ) { Icon(icon, null, Modifier.size(26.dp), tint = cs.primary) }
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                if (sub.isNotEmpty()) Text(sub, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant, maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
-        },
-        trailingContent = { Switch(checked = checked, onCheckedChange = onChange) },
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-        modifier = Modifier.fillMaxWidth().clickable { onChange(!checked) },
-    )
-    if (open) {
-        AlertDialog(
-            onDismissRequest = { open = false },
-            icon = { Icon(Icons.Rounded.Info, null) },
-            title = { Text(title) },
-            text = { Text(info) },
-            confirmButton = { TextButton(onClick = { open = false }) { Text(stringResource(R.string.close)) } },
-        )
+            Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = cs.onSurfaceVariant)
+        }
     }
 }

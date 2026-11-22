@@ -1,3 +1,5 @@
+/* Modified for QuDroid: the toggles use InfoToggle (white (i) beside the switch). Based on the GitHub copy of this file:
+ * if yours differs, only change each `Toggle(` to `InfoToggle(` there. */
 package app.aemu.ui
 
 import androidx.compose.foundation.layout.*
@@ -56,9 +58,9 @@ internal fun NavigationSettings(s: VmSettings, preRelease: Boolean = false, set:
         }
         TextButton({ set(s.copy(navButtons = NavControls.DEFAULT_BUTTONS)) }) { Text(stringResource(R.string.nav_reset)) }
     }
-    Toggle(stringResource(R.string.nav_trackball), stringResource(R.string.nav_trackball_sub), s.trackball) { set(s.copy(trackball = it)) }
+    InfoToggle(stringResource(R.string.nav_trackball), stringResource(R.string.nav_trackball_sub), s.trackball) { set(s.copy(trackball = it)) }
     if (s.trackball) {
-        Toggle(stringResource(R.string.nav_dpad_mode), stringResource(R.string.nav_dpad_sub), s.trackballDpad) { set(s.copy(trackballDpad = it)) }
+        InfoToggle(stringResource(R.string.nav_dpad_mode), stringResource(R.string.nav_dpad_sub), s.trackballDpad) { set(s.copy(trackballDpad = it)) }
         Column(Modifier.padding(horizontal = 16.dp)) {
             Text(stringResource(R.string.nav_sensitivity, s.trackballStepDp))
             Slider(s.trackballStepDp.toFloat(), { set(s.copy(trackballStepDp = it.toInt().coerceIn(4, 48))) }, valueRange = 4f..48f)
@@ -66,7 +68,7 @@ internal fun NavigationSettings(s: VmSettings, preRelease: Boolean = false, set:
     }
     // a pre-1.0 image has one combined keypad and keyboard window of its own, always on: neither input method applies
     if (!preRelease) {
-        Toggle(stringResource(R.string.vi_mouse_keyboard), stringResource(R.string.vi_mouse_keyboard_sub), s.mouseKeyboard) { set(s.copy(mouseKeyboard = it)) }
-        Toggle(stringResource(R.string.vi_keypad), stringResource(R.string.vi_keypad_sub), s.keypad) { set(s.copy(keypad = it)) }
+        InfoToggle(stringResource(R.string.vi_mouse_keyboard), stringResource(R.string.vi_mouse_keyboard_sub), s.mouseKeyboard) { set(s.copy(mouseKeyboard = it)) }
+        InfoToggle(stringResource(R.string.vi_keypad), stringResource(R.string.vi_keypad_sub), s.keypad) { set(s.copy(keypad = it)) }
     }
 }

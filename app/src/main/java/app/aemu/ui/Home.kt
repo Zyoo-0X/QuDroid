@@ -227,8 +227,8 @@ fun StaggerIn(index: Int, seen: MutableSet<Int>? = null, content: @Composable ()
 }
 
 /**
- * The library's menu button: just three dots, no coloured circle and no edge. It floats at the bottom of the screen
- * and opens [HomeMenuSheet]; it gives a little under the finger like the cards do.
+ * The library's menu button: just three dots, no coloured circle and no edge. It sits in the top bar on the line of
+ * the title, opens [HomeMenuSheet], and gives a little under the finger like the cards do.
  */
 @Composable
 fun HomeMenuButton(onClick: () -> Unit) {
@@ -238,7 +238,7 @@ fun HomeMenuButton(onClick: () -> Unit) {
     IconButton(
         onClick = onClick,
         interactionSource = press,
-        modifier = Modifier.size(56.dp).graphicsLayer { scaleX = scale; scaleY = scale },
+        modifier = Modifier.size(48.dp).graphicsLayer { scaleX = scale; scaleY = scale },
     ) {
         Icon(Icons.Rounded.MoreHoriz, stringResource(R.string.menu), Modifier.size(32.dp), tint = MaterialTheme.colorScheme.onSurface)
     }

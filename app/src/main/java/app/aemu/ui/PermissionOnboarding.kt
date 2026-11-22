@@ -70,7 +70,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import android.os.SystemClock
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -152,17 +154,37 @@ private fun permItems(): List<PermItem> {
     )
 }
 
+/** Permissions this build declares in AndroidManifest.xml: asking for one that is not declared silently does nothing. */
+@Suppress("DEPRECATION")
+private fun declared(ctx: Context): Set<String> = declaredCache ?: runCatching {
+    ctx.packageManager.getPackageInfo(ctx.packageName, android.content.pm.PackageManager.GET_PERMISSIONS)
+        .requestedPermissions?.toSet() ?: emptySet()
+}.getOrDefault(emptySet()).also { declaredCache = it }
+
+private var declaredCache: Set<String>? = null
+
+/** What can really be asked for this row: its permissions that the manifest declares. */
+private fun PermItem.req(ctx: Context): List<String> = manifest.filter { it in declared(ctx) }
+
 private fun has(ctx: Context, p: String) = ContextCompat.checkSelfPermission(ctx, p) == android.content.pm.PackageManager.PERMISSION_GRANTED
 
 private fun PermItem.granted(ctx: Context, shizuku: Boolean): Boolean = when (id) {
-    "files" -> if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager() else manifest.all { has(ctx, it) }
+    "files" -> if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager() else req(ctx).let { it.isNotEmpty() && it.all { p -> has(ctx, p) } }
     "shizuku" -> shizuku
+    // notifications: the real switch of the app (also covers Android 12 and older, which have no permission dialog)
+    "notif" -> NotificationManagerCompat.from(ctx).areNotificationsEnabled()
     // Android 14: "selected photos only" counts as allowed
     "photos" -> if (Build.VERSION.SDK_INT >= 34)
         (has(ctx, Manifest.permission.READ_MEDIA_IMAGES) && has(ctx, Manifest.permission.READ_MEDIA_VIDEO)) ||
             has(ctx, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
-    else manifest.all { has(ctx, it) }
-    else -> manifest.all { has(ctx, it) }
+    else req(ctx).let { it.isNotEmpty() && it.all { p -> has(ctx, p) } }
+    else -> req(ctx).let { it.isNotEmpty() && it.all { p -> has(ctx, p) } }
+}
+
+private fun openNotificationSettings(ctx: Context) {
+    runCatching {
+        ctx.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName))
+    }.onFailure { openAppDetails(ctx) }
 }
 
 private fun openAllFilesAccess(ctx: Context) {
@@ -209,8 +231,16 @@ fun PermissionOnboardingScreen(onFinish: () -> Unit) {
 
     val status = remember(tick, shizukuGranted) { items.associate { it.id to it.granted(ctx, shizukuGranted) } }
 
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+    var lastAsk by remember { mutableStateOf<String?>(null) }
+    var lastAskAt by remember { mutableStateOf(0L) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
         tick++
+        // the answer came back at once and nothing was granted: Android did not show a dialog (denied for good, or the
+        // permission is not allowed to be asked here), so send the user to the matching page of system Settings
+        val instant = SystemClock.elapsedRealtime() - lastAskAt < 400
+        if (instant && result.isNotEmpty() && result.values.none { it }) {
+            if (lastAsk == "notif") openNotificationSettings(ctx) else if (lastAsk != null) openAppDetails(ctx)
+        }
         if (pendingFiles) {
             pendingFiles = false
             if (Build.VERSION.SDK_INT >= 30 && !Environment.isExternalStorageManager()) openAllFilesAccess(ctx)
@@ -219,7 +249,7 @@ fun PermissionOnboardingScreen(onFinish: () -> Unit) {
 
     fun allow(item: PermItem) {
         when (item.id) {
-            "files" -> if (Build.VERSION.SDK_INT >= 30) openAllFilesAccess(ctx) else launcher.launch(item.manifest.toTypedArray())
+            "files" -> if (Build.VERSION.SDK_INT >= 30) openAllFilesAccess(ctx) else launcher.launch(item.req(ctx).toTypedArray())
             "shizuku" -> {
                 if (!shizukuRunning) {
                     val launch = ctx.packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")
@@ -227,15 +257,20 @@ fun PermissionOnboardingScreen(onFinish: () -> Unit) {
                 } else app.aemu.core.ShizukuAccess.request()
             }
             else -> {
+                val todo = item.req(ctx).filter { !has(ctx, it) }
                 val n = (asked[item.id] ?: 0) + 1
                 asked[item.id] = n
-                // asked twice and still denied: Android no longer shows the dialog, so open the app's own settings
-                if (n > 2) openAppDetails(ctx) else launcher.launch(item.manifest.toTypedArray())
+                when {
+                    // nothing of it is declared in the manifest, or it was refused twice: only system Settings can help
+                    todo.isEmpty() || n > 2 -> if (item.id == "notif") openNotificationSettings(ctx) else openAppDetails(ctx)
+                    else -> { lastAsk = item.id; lastAskAt = SystemClock.elapsedRealtime(); launcher.launch(todo.toTypedArray()) }
+                }
             }
         }
     }
 
-    val required = items.filter { !it.optional }
+    // a row whose permissions are not declared in the manifest cannot be asked for, so it does not block Continue
+    val required = items.filter { !it.optional && (it.id == "files" || it.id == "notif" || it.req(ctx).isNotEmpty()) }
     val doneCount = required.count { status[it.id] == true }
     val allRequired = doneCount == required.size
     val progress by animateFloatAsState(doneCount / required.size.toFloat(), spring(stiffness = Spring.StiffnessLow), label = "permProgress")
@@ -243,10 +278,11 @@ fun PermissionOnboardingScreen(onFinish: () -> Unit) {
 
     fun allowAll() {
         val todo = items.filter { it.id != "shizuku" && it.id != "files" && status[it.id] != true }
-            .flatMap { it.manifest }.distinct()
+            .flatMap { it.req(ctx) }.filter { !has(ctx, it) }.distinct()
         pendingFiles = Build.VERSION.SDK_INT >= 30 && status["files"] != true
-        if (todo.isNotEmpty()) launcher.launch(todo.toTypedArray())
+        if (todo.isNotEmpty()) { lastAsk = null; launcher.launch(todo.toTypedArray()) }
         else if (pendingFiles) { pendingFiles = false; openAllFilesAccess(ctx) }
+        else if (status["notif"] != true) openNotificationSettings(ctx)
     }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).statusBarsPadding().navigationBarsPadding()) {

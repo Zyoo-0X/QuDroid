@@ -284,7 +284,7 @@ fun Library(model: LibraryModel) {
                 app.aemu.AppPrefs.setLastUpdateCheck(ctx, now)
                 val res = AppUpdateManager.checkLatestRelease()
                 res.getOrNull()?.let { rel ->
-                    if (AppUpdateManager.isNewerVersion(rel.versionName, BuildConfig.VERSION_NAME)) {
+                    if (UpdateVersion.isNewer(rel.versionName, BuildConfig.VERSION_NAME)) {
                         updateState = UpdateState.Available(rel)
                     }
                 }
@@ -314,11 +314,11 @@ fun Library(model: LibraryModel) {
         topBar = {
             TopAppBar(
                 title = { Text("QuDroid", style = MaterialTheme.typography.titleLarge, maxLines = 1) },
+                // the menu button sits on the same line as the title, at the right: just three dots
+                actions = { HomeMenuButton(onClick = { homeMenu = true }) },
                 scrollBehavior = scroll,
             )
         },
-        // Add and Settings live in the menu at the bottom (like the machine menu)
-        floatingActionButton = { HomeMenuButton(onClick = { homeMenu = true }) },
     ) { pad ->
         if (newHome) {
             val full: androidx.compose.foundation.lazy.grid.LazyGridItemSpanScope.() -> androidx.compose.foundation.lazy.grid.GridItemSpan =
