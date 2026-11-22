@@ -20,6 +20,8 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Shizuku: without this the Shizuku app does not list QuDroid and the permission can never be given -->
+    <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
@@ -257,6 +259,11 @@
             android:name="dev.lk.dhd.GlSlot3"
             android:exported="false"
             android:process=":gl3" />
+
+        <!-- answer of the system installer for an in-app update (confirmation + the reason of a failure) -->
+        <receiver
+            android:name=".update.InstallResultReceiver"
+            android:exported="false" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
