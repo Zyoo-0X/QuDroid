@@ -44,6 +44,8 @@ data class VmSettings(
     /** Input method "keypad": a feature-phone key window; independent of touch and of [mouseKeyboard]. */
     val keypad: Boolean = false,
     val keepScreenOn: Boolean = true,
+    /** "Like a real phone": the host volume keys drive the guest, the host screen off/on sleeps/wakes the guest (its lock screen shows), the guest shows over the host lock screen. */
+    val realPhone: Boolean = false,
     /** the guest phone's notification LED drawn above its screen (0.0.0.3) */
     val showLed: Boolean = true,
     val vibration: Boolean = true,
@@ -172,7 +174,7 @@ data class VmSettings(
         .put("trackball", trackball).put("trackballDpad", trackballDpad)
         .put("trackballStepDp", trackballStepDp.coerceIn(4, 48))
         .put("mouseKeyboard", mouseKeyboard).put("keypad", keypad)
-        .put("keepScreenOn", keepScreenOn).put("showLed", showLed).put("native32", native32).put("translate32", translate32).put("mtMode", mtMode).put("legacyEngine", legacyEngine)
+        .put("keepScreenOn", keepScreenOn).put("realPhone", realPhone).put("showLed", showLed).put("native32", native32).put("translate32", translate32).put("mtMode", mtMode).put("legacyEngine", legacyEngine)
         .put("vibration", vibration)
         .put("hostBattery", hostBattery)
         .put("camera", camera)
@@ -317,6 +319,7 @@ data class VmSettings(
                 mouseKeyboard = o.optBoolean("mouseKeyboard", false),
                 keypad = o.optBoolean("keypad", false),
                 keepScreenOn = o.optBoolean("keepScreenOn", d.keepScreenOn),
+                realPhone = o.optBoolean("realPhone", d.realPhone),
                 showLed = o.optBoolean("showLed", d.showLed),
                 vibration = o.optBoolean("vibration", d.vibration),
                 hostBattery = o.optBoolean("hostBattery", d.hostBattery),
