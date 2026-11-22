@@ -30,6 +30,7 @@ import app.aemu.core.NavButton
 import app.aemu.core.NavControls
 import app.aemu.core.HeldNavKeys
 import app.aemu.core.VmUiPolicy
+import app.aemu.core.SystemUiLock
 import app.aemu.core.TrackballMotion
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.imePadding
@@ -202,7 +203,7 @@ object VmHost {
             vm = null
             // GL-мост нельзя поднять повторно в том же процессе — процесс уходит вместе с машиной
             Thread.sleep(300)
-            runCatching { app.aemu.core.SystemUiLock.releaseIfIdle(app) }
+            runCatching { SystemUiLock.releaseIfIdle(app) }
             android.os.Process.killProcess(android.os.Process.myPid())
         }
     }
@@ -853,7 +854,7 @@ open class VmActivity : ComponentActivity() {
             runOnUiThread { if (!isDestroyed) { if (inFront) TabNav.go(this, next); finish() } }
             Thread.sleep(300)
             // GL-мост нельзя поднять повторно в том же процессе — процесс :vm уходит вместе с машиной
-            runCatching { app.aemu.core.SystemUiLock.releaseIfIdle(app) }
+            runCatching { SystemUiLock.releaseIfIdle(app) }
             android.os.Process.killProcess(android.os.Process.myPid())
         }
     }
