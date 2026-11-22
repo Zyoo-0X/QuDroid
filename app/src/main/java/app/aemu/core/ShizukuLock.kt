@@ -210,11 +210,6 @@ object ShizukuAccess {
  */
 object SystemUiLock {
     private val main = Handler(Looper.getMainLooper())
-    private val FLAGS = listOf(
-        "notification-peek", "notification-alerts", "notification-icons", "notification-shade",
-        "quick-settings", "statusbar-expansion", "home", "back",
-    )
-    @Volatile private var cache: Set<String>? = null
 
     private fun holderDir(ctx: Context) = File(ctx.filesDir, "ui-lock").apply { mkdirs() }
     private fun holderFile(ctx: Context, owner: Any) = File(holderDir(ctx), "${AndroidProcess.myPid()}-${System.identityHashCode(owner)}")
@@ -273,35 +268,82 @@ object SystemUiLock {
             try { Thread.sleep(300) } catch (_: InterruptedException) { }
             code = ShizukuAccess.exec("cmd", "statusbar", "send-disable-flag", "none").first
         }
+        watchFlags = null
         restorePowerLongPress(app)
+        note(app, "unlocked -> exit $code")
         // the marker stays when the system did not take the unlock back: the next start tries again
         if (code == 0) runCatching { marker(app).delete() }
     }
 
-    @Synchronized
-    private fun applyLock(app: Context, o: ShizukuOptions) {
-        if (!ShizukuAccess.awaitReady()) return
-        val wantFlags = o.notifications || o.quickSettings || o.home || o.back
-        val sup = if (wantFlags) supported(app) else emptySet()
+    /** The system's disable flags for what the person chose. Names the system does not know are ignored by it. */
+    private fun flagsFor(o: ShizukuOptions): List<String> {
         val want = LinkedHashSet<String>()
         if (o.notifications) want += listOf("notification-peek", "notification-alerts", "notification-icons")
         if (o.notifications && o.quickSettings) want += "notification-shade"
-        if (o.quickSettings) want += "quick-settings"
-        if (o.home) want += "home"
+        // "quick-settings" is a separate flag only on newer Android (and some skins ignore it): the whole pull-down goes as well
+        if (o.quickSettings) want += listOf("quick-settings", "statusbar-expansion")
+        // Recents is locked with Home: otherwise the app switcher is a way out of the machine
+        if (o.home) want += listOf("home", "recents")
         if (o.back) want += "back"
-        val use = want.filter { it in sup }.toMutableList()
-        // older systems have no separate flags: the whole pull-down goes
-        val shade = (o.quickSettings && "quick-settings" !in sup) || (o.notifications && o.quickSettings && "notification-shade" !in sup)
-        if (shade && "statusbar-expansion" in sup) use += "statusbar-expansion"
+        return want.toList()
+    }
+
+    /** Sends the flags; the answer of the system is kept (see [lastResult]) so a lock that does not work can be understood. */
+    private fun sendFlags(app: Context, use: List<String>): Boolean {
+        var r = ShizukuAccess.exec("cmd", "statusbar", "send-disable-flag", *use.toTypedArray())
+        if (r.first != 0) { // once more: the status bar service may be busy
+            try { Thread.sleep(300) } catch (_: InterruptedException) { }
+            r = ShizukuAccess.exec("cmd", "statusbar", "send-disable-flag", *use.toTypedArray())
+        }
+        note(app, "send-disable-flag ${use.joinToString(" ")} -> exit ${r.first}" + (if (r.second.isNotBlank()) ": ${r.second.take(160)}" else ""))
+        return r.first == 0
+    }
+
+    private fun lastFile(app: Context) = File(app.filesDir, "ui-lock-last.txt")
+    private fun note(app: Context, text: String) {
+        android.util.Log.i("QuDroidLock", text)
+        runCatching { lastFile(app).writeText(text) }
+    }
+    /** What the last attempt to lock or unlock the phone's system UI said (empty: none yet). */
+    fun lastResult(ctx: Context): String = runCatching { lastFile(ctx.applicationContext).readText() }.getOrDefault("")
+
+    @Volatile private var watchFlags: List<String>? = null
+    @Volatile private var watching = false
+
+    /** Some systems drop the flags (screen off/on, status bar restart): while a machine is on screen they are sent again. */
+    private fun startWatch(app: Context, use: List<String>) {
+        watchFlags = use
+        if (watching) return
+        watching = true
+        Thread({
+            try {
+                while (true) {
+                    Thread.sleep(3000)
+                    val flags = watchFlags ?: break
+                    synchronized(this) {
+                        if (!marker(app).exists() || liveHolders(app) == 0) { watchFlags = null }
+                        else ShizukuAccess.exec("cmd", "statusbar", "send-disable-flag", *flags.toTypedArray())
+                    }
+                    if (watchFlags == null) break
+                }
+            } catch (_: InterruptedException) {
+            } finally { watching = false }
+        }, "ui-lock-watch").apply { isDaemon = true; start() }
+    }
+
+    @Synchronized
+    private fun applyLock(app: Context, o: ShizukuOptions) {
+        if (!ShizukuAccess.awaitReady()) {
+            note(app, "not locked: " + ShizukuAccess.describe(ShizukuAccess.state(app)))
+            return
+        }
+        val use = flagsFor(o)
         if (use.isEmpty() && !o.disablePower) return
         runCatching { marker(app).writeText("1") } // before the command: a lock without a marker could never be taken back
         if (o.disablePower) holdPowerLongPress(app)
         if (use.isNotEmpty()) {
-            var code = ShizukuAccess.exec("cmd", "statusbar", "send-disable-flag", *use.toTypedArray()).first
-            if (code != 0) {
-                try { Thread.sleep(300) } catch (_: InterruptedException) { }
-                code = ShizukuAccess.exec("cmd", "statusbar", "send-disable-flag", *use.toTypedArray()).first
-            }
+            sendFlags(app, use)
+            startWatch(app, use)
         }
     }
 
@@ -330,20 +372,5 @@ object SystemUiLock {
         if (v.isEmpty() || v == "null") ShizukuAccess.exec("settings", "delete", "global", POWER_LONG)
         else ShizukuAccess.exec("settings", "put", "global", POWER_LONG, v)
         runCatching { f.delete() }
-    }
-
-    /** Which flag names this Android knows (an unknown name makes the command print an error); remembered per build. */
-    private fun supported(app: Context): Set<String> {
-        cache?.let { return it }
-        val f = File(app.filesDir, "ui-lock-flags-${Build.FINGERPRINT.hashCode()}")
-        val saved = runCatching { if (f.exists()) f.readText().split(',').filter { it.isNotEmpty() }.toSet() else null }.getOrNull()
-        if (!saved.isNullOrEmpty()) { cache = saved; return saved }
-        val ok = FLAGS.filter { name ->
-            val (code, out) = ShizukuAccess.exec("cmd", "statusbar", "send-disable-flag", name)
-            code == 0 && out.isBlank()
-        }
-        ShizukuAccess.exec("cmd", "statusbar", "send-disable-flag", "none")
-        if (ok.isNotEmpty()) { runCatching { f.writeText(ok.joinToString(",")) }; cache = ok.toSet() }
-        return ok.toSet()
     }
 }
