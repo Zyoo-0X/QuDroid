@@ -202,6 +202,11 @@ object AppPrefs {
             keypad = p.getBoolean("def_keypad", false),
             keepScreenOn = p.getBoolean("def_awake", d.keepScreenOn),
             showLed = p.getBoolean("def_led", d.showLed),
+            // new systems follow the phone's own screen size and DPI unless the user chose fixed values
+            hostResolution = p.getBoolean("def_host_res", true),
+            width = p.getInt("def_width", d.width).coerceAtLeast(2) and 0x7ffffffe,
+            height = p.getInt("def_height", d.height).coerceAtLeast(2) and 0x7ffffffe,
+            density = p.getInt("def_density", d.density).coerceIn(96, 640),
         )
     }
 
@@ -210,7 +215,9 @@ object AppPrefs {
         .putBoolean("def_nav", s.showNavBar).putBoolean("def_awake", s.keepScreenOn).putBoolean("def_led", s.showLed)
         .putString("def_nav_buttons", s.navButtons).putBoolean("def_trackball", s.trackball)
         .putBoolean("def_trackball_dpad", s.trackballDpad).putInt("def_trackball_step", s.trackballStepDp)
-        .putBoolean("def_mouse_keyboard", s.mouseKeyboard).putBoolean("def_keypad", s.keypad).apply()
+        .putBoolean("def_mouse_keyboard", s.mouseKeyboard).putBoolean("def_keypad", s.keypad)
+        .putBoolean("def_host_res", s.hostResolution).putInt("def_width", s.width).putInt("def_height", s.height)
+        .putInt("def_density", s.density).apply()
 
     /** Контекст с выбранным языком — для attachBaseContext каждой активности. */
     /**
