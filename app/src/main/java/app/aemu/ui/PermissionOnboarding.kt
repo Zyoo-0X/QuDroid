@@ -229,6 +229,17 @@ fun PermissionOnboardingScreen(onFinish: () -> Unit) {
         }
     }
 
+    // Shizuku is running and QuDroid is allowed in it: switch the Shizuku option of QuDroid on, with every "Disable" on
+    LaunchedEffect(shizukuGranted) {
+        if (shizukuGranted) withContext(Dispatchers.IO) {
+            runCatching {
+                val cur = app.aemu.core.ShizukuLockStore.read(ctx)
+                if (!cur.enabled) app.aemu.core.ShizukuLockStore.write(ctx,
+                    cur.copy(enabled = true, notifications = true, quickSettings = true, home = true, back = true))
+            }
+        }
+    }
+
     val status = remember(tick, shizukuGranted) { items.associate { it.id to it.granted(ctx, shizukuGranted) } }
 
     var lastAsk by remember { mutableStateOf<String?>(null) }

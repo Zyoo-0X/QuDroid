@@ -315,7 +315,10 @@ fun Library(model: LibraryModel) {
             TopAppBar(
                 title = { Text("QuDroid", style = MaterialTheme.typography.titleLarge, maxLines = 1) },
                 // the menu button sits on the same line as the title, at the right: just three dots
-                actions = { HomeMenuButton(onClick = { homeMenu = true }) },
+                actions = {
+                    HomeMenuButton(onClick = { homeMenu = true })
+                    Spacer(Modifier.width(14.dp)) // keep it off the screen edge
+                },
                 scrollBehavior = scroll,
             )
         },

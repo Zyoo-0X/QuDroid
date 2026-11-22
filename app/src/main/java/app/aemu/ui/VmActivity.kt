@@ -520,7 +520,7 @@ open class VmActivity : ComponentActivity() {
         frameCallback = { guest.rings++; guest.poke() }
         vm.onFrame = frameCallback
         state = vm.state
-        logLines.addAll(vm.lines().takeLast(200))
+        logLines.addAll(vm.lines().takeLast(3000))
         stateListener = { st: GuestVm.State -> runOnUiThread { state = st } }
         vm.onState(stateListener!!)
         adbdUp = vm.adbdUp
@@ -531,8 +531,18 @@ open class VmActivity : ComponentActivity() {
         led = vm.lights.current
         ledListener = { l: app.aemu.core.Lights.Led? -> runOnUiThread { led = l } }
         vm.lights.onChange(ledListener!!)
-        logListener = { line: String -> runOnUiThread { logLines.add(line); if (logLines.size > 400) logLines.removeRange(0, logLines.size - 400) } }
+        logListener = { line: String -> runOnUiThread { logLines.add(line); if (logLines.size > 4000) logLines.removeRange(0, logLines.size - 4000) } }
         vm.onLog(logListener!!)
+        // the head of the log: what is running on what, and how the phone is locked (Shizuku)
+        runCatching {
+            vm.log("host: Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT}), ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}, ${android.os.Build.SUPPORTED_ABIS.firstOrNull() ?: "?"}")
+            vm.log("machine: ${vm.img.name} (API ${vm.img.api}), ${vm.settings.width}x${vm.settings.height}")
+            val z = app.aemu.core.ShizukuLockStore.read(applicationContext)
+            vm.log(if (z.enabled) "shizuku: on, locked: " + listOfNotNull(
+                "notifications".takeIf { z.notifications }, "quick settings".takeIf { z.quickSettings },
+                "home".takeIf { z.home }, "back".takeIf { z.back }).ifEmpty { listOf("nothing") }.joinToString(", ")
+            else "shizuku: off, the phone's notifications and buttons are not locked")
+        }
         guest.start()
         resetMenuOffset() // every start of the emulator puts the menu button back in its corner
 
@@ -589,7 +599,9 @@ open class VmActivity : ComponentActivity() {
         applyCutoutBarrier()
         orientationListener?.enable()
         if (::vm.isInitialized) { vm.cameraVisible(true); vm.micVisible(true); vm.motionVisible(true); if (vm.engine == Engine.N64) vm.sensors.resume(true) }
-        app.aemu.core.SystemUiLock.resume(this, this) // Shizuku: notifications / quick settings / Home / Back, as chosen in Settings
+        // Shizuku: notifications / quick settings / Home / Back, as chosen in Settings; nothing is locked while Shizuku is off
+        if (runCatching { app.aemu.core.ShizukuLockStore.read(applicationContext).enabled }.getOrDefault(false))
+            app.aemu.core.SystemUiLock.resume(this, this)
     }
 
     override fun onPause() {
@@ -1928,21 +1940,37 @@ open class VmActivity : ComponentActivity() {
     @Composable
     private fun LogPanel(onClose: () -> Unit) {
         var guestTab by remember { mutableStateOf(false) }
+        var query by remember { mutableStateOf("") }
+        var follow by remember { mutableStateOf(true) }
         val guestLines = remember { mutableStateListOf<String>() }
         LaunchedEffect(guestTab) {
             while (guestTab) {
-                val recs = GuestLog.tail(vm.paths.root, 128 * 1024).takeLast(300)
-                guestLines.clear(); guestLines.addAll(recs.map { "${it.prio} ${it.tag}: ${it.msg}" })
+                // up to 1 MB of the guest's logcat, read off the main thread
+                val recs = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { GuestLog.tail(vm.paths.root, 1024 * 1024).takeLast(3000) }
+                val next = recs.map { "${it.prio} ${it.tag}: ${it.msg}" }
+                if (next != guestLines.toList()) { guestLines.clear(); guestLines.addAll(next) }
                 delay(1500)
             }
         }
-        val list = if (guestTab) guestLines else logLines
+        val all = if (guestTab) guestLines else logLines
+        val list = if (query.isBlank()) all.toList() else all.filter { it.contains(query, ignoreCase = true) }
+        fun colorOf(line: String): Color {
+            val l = line.lowercase()
+            return when {
+                line.startsWith("E ") || line.startsWith("F ") || "error" in l || "fail" in l || "exception" in l || "fatal" in l -> Color(0xFFFF8A80)
+                line.startsWith("W ") || "warn" in l -> Color(0xFFFFE082)
+                line.startsWith("D ") || line.startsWith("V ") -> Color(0xFF9FB4A0)
+                else -> Color(0xFFCFE8CF)
+            }
+        }
         Surface(Modifier.fillMaxSize(), color = Color(0xF0101410), contentColor = Color(0xFFE2E3DD)) {
             Column(Modifier.statusBarsPadding().navigationBarsPadding().imePadding().padding(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(R.string.log), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f),
-                        maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    IconButton(onClick = { copyLog(list.toList()) }) { Icon(Icons.Rounded.ContentCopy, stringResource(R.string.log_copy)) }
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.log), style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(if (query.isBlank()) "${all.size}" else "${list.size} / ${all.size}", style = MaterialTheme.typography.labelSmall, color = Color(0xFF9FB4A0))
+                    }
+                    IconButton(onClick = { copyLog(list) }) { Icon(Icons.Rounded.ContentCopy, stringResource(R.string.log_copy)) }
                     IconButton(onClick = { pendingGuestExport = guestTab; exportLog.launch("aemu-${vm.img.id}-${if (guestTab) "logcat" else "host"}.log") }) {
                         Icon(Icons.Rounded.Download, stringResource(R.string.log_export))
                     }
@@ -1958,11 +1986,19 @@ open class VmActivity : ComponentActivity() {
                     }
                 }
                 Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    androidx.compose.material3.OutlinedTextField(
+                        value = query, onValueChange = { query = it }, singleLine = true,
+                        placeholder = { Text("Filter") }, modifier = Modifier.weight(1f),
+                    )
+                    androidx.compose.material3.FilterChip(selected = follow, onClick = { follow = !follow }, label = { Text("Follow") })
+                }
+                Spacer(Modifier.height(8.dp))
                 val st = rememberLazyListState()
-                LaunchedEffect(list.size) { if (list.isNotEmpty()) st.scrollToItem(list.size - 1) }
+                LaunchedEffect(list.size, follow) { if (follow && list.isNotEmpty()) st.scrollToItem(list.size - 1) }
                 SelectionContainer {
                     LazyColumn(state = st, modifier = Modifier.fillMaxSize()) {
-                        items(list) { Text(it, style = Mono, color = Color(0xFFCFE8CF)) }
+                        items(list) { Text(it, style = Mono, color = colorOf(it)) }
                     }
                 }
             }

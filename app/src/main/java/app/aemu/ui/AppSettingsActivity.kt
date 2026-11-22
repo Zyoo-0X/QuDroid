@@ -477,7 +477,7 @@ private fun ShizukuSettings() {
     }
     Section("Shizuku", "Lock parts of the phone while a machine is on screen") {
         InfoToggle("Use Shizuku", status, opts.enabled) { on ->
-            save(if (on) opts.copy(enabled = true, notifications = true, quickSettings = true, home = true, back = true) else opts.copy(enabled = false))
+            save(if (on) opts.copy(enabled = true, notifications = true, quickSettings = true, home = true, back = true) else opts.copy(enabled = false, notifications = false, quickSettings = false, home = false, back = false))
             if (on && running && !granted) app.aemu.core.ShizukuAccess.request()
         }
         if (opts.enabled) {
