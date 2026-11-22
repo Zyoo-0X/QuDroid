@@ -1,0 +1,3 @@
+# benarkan kunci tetap masuk repo walaupun .gitignore root menolak *.jks
+!qudroid.jks
+!signing.properties
